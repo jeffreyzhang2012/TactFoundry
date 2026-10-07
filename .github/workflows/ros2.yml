@@ -1,0 +1,23 @@
+name: ROS 2 Humble
+on: [push, pull_request]
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    container: ros:humble-ros-base-jammy
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        shell: bash
+        run: |
+          apt-get update
+          apt-get install -y python3-colcon-common-extensions python3-rosdep python3-pytest
+          rosdep update
+          rosdep install --from-paths src --ignore-src -r -y
+      - name: Build and test
+        shell: bash
+        run: |
+          source /opt/ros/humble/setup.bash
+          colcon build
+          source install/setup.bash
+          colcon test --return-code-on-test-failure
+          colcon test-result --verbose

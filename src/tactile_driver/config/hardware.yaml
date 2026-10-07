@@ -1,0 +1,10 @@
+tactile_driver:
+  ros__parameters:
+    port: /dev/serial/by-id/YOUR_SENSOR
+    baud_rate: 115200
+    rows: 2
+    columns: 2
+    sensor_id: tactile_0
+    frame_id: tactile_link
+    units: raw
+    stale_timeout: 1.0

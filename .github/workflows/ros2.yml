@@ -10,9 +10,10 @@ jobs:
         shell: bash
         run: |
           apt-get update
-          apt-get install -y python3-colcon-common-extensions python3-rosdep python3-pytest
+          apt-get install -y python3-colcon-common-extensions python3-rosdep python3-pytest python3-pip
           rosdep update
           rosdep install --from-paths src --ignore-src -r -y
+          python3 -m pip install -r src/tactile_simulation/requirements.txt
       - name: Build and test
         shell: bash
         run: |

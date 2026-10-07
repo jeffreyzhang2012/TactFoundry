@@ -1,0 +1,7 @@
+# kind: mixed, cube, box, sphere, cylinder, capsule, bottle, mug, bowl.
+string kind
+uint16 count
+uint32 seed
+---
+bool success
+string message

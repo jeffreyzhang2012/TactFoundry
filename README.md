@@ -2,6 +2,100 @@
 
 ROS 2 tactile sensing workspace for NVIDIA Jetson Orin and real hardware.
 
+## Camera and grasping playground
+
+The WSL playground provides a CPU-rendered wrist camera, a low tabletop,
+gravity/contact physics, and an object-control window. The joint sliders
+command simulation motors; RViz receives the simulated joint positions.
+This mode uses PyBullet 3.2.7 and runs without a dedicated rendering GPU.
+
+```bash
+source /opt/ros/humble/setup.bash
+cd ~/projects/TactFoundry
+python3 -m pip install --user -r src/tactile_simulation/requirements.txt
+rosdep install --from-paths src --ignore-src -r -y
+colcon build --symlink-install
+source install/setup.bash
+ros2 launch tactile_simulation playground.launch.py
+```
+
+The **Grasp objects** window lets you choose cubes, boxes, spheres, cylinders,
+capsules, bottles, mugs, bowls, or a mixed batch. Select a quantity and seed,
+then add objects, clear them, generate a new mixed scene, or reset the arm.
+The scene supports up to 48 objects at a time. Mugs and bowls use hollow
+compound collision shapes; these are procedural approximations, not scanned
+household models. Move the arm with its six sliders, and close the AG-95
+with its gripper slider to explore object contact. Successful holding depends
+on alignment and simulated contact forces; there is no automatic grasp planner.
+
+Examples:
+
+```bash
+ros2 launch tactile_simulation playground.launch.py object_kind:=mixed object_count:=24 seed:=7
+ros2 launch tactile_simulation playground.launch.py object_kind:=mug object_count:=6
+ros2 launch tactile_simulation playground.launch.py object_count:=0
+```
+
+Simulation uses ROS domain **42** by default to isolate it from real hardware
+and display-only nodes. For CLI tools in another terminal:
+
+```bash
+export ROS_DOMAIN_ID=42
+ros2 topic hz /camera/color/image_raw
+ros2 service call /scene/spawn_objects tactile_interfaces/srv/SpawnObjects \
+  "{kind: 'bottle', count: 5, seed: 10}"
+ros2 service call /scene/clear_objects std_srvs/srv/Trigger '{}'
+```
+
+Use `domain_id:=N` to change the simulation domain, `gui:=false rviz:=false`
+for headless mode, or `camera_source:=none` to disable camera rendering.
+RViz has color and depth image panels. Simulation publishes 320x240 RGB
+(`rgb8`), idealized depth (`32FC1`, meters), and matching CameraInfo at a
+target 10 Hz; achieved rate depends on CPU load. Camera pose comes from the
+moving wrist's optical frame. This models geometry and occlusion, not D435
+stereo noise, exposure, distortion, or a calibrated depth sensor.
+
+### Real D435 view
+
+On a machine with a connected D435 and ROS USB access:
+
+```bash
+sudo apt install ros-humble-realsense2-camera
+ros2 launch tactile_simulation camera_view.launch.py
+```
+
+This opens the existing robot display and starts the RealSense driver. It
+uses the same `/camera/color/image_raw`, `/camera/depth/image_raw`, and
+`/camera/{color,depth}/camera_info` interface as simulation. Real depth images
+may use a different encoding/unit than simulated depth; inspect the message
+and CameraInfo before processing them. Driver TF publishing is disabled
+because the robot description owns the nominal camera frames. Calibrate the
+mount/extrinsics before using them for real robot motion. The real camera
+mode does not command the physical arm or gripper. Live USB streaming must
+be tested with the actual camera; it was not connected during development.
+
+WSL USB devices require explicit USB passthrough; the physical D435 is
+usually easier to run directly on the Jetson. `camera_source:=real` can also
+replace the simulated camera feed inside the playground, but the physical
+camera pose then does not follow the simulated robot.
+
+### Simulation environment choice
+
+- **PyBullet**: included here for fast WSL prototypes, contact experiments,
+  and CPU camera rendering. The AG-95's mimic joints use individual simulated
+  motors; the physical closed-loop linkage, calibrated actuators, self-collision
+  checks, tactile deformation, and force sensing are not implemented.
+- **Gazebo Fortress**: the official pairing for the project's ROS 2 Humble /
+  Ubuntu 22.04 stack, suitable for a future ros2_control/MoveIt integration.
+  For a new Ubuntu 24.04 / ROS 2 Jazzy project, use Gazebo Harmonic instead.
+  See the [official ROS/Gazebo compatibility guide](https://gazebosim.org/docs/fortress/ros_installation/).
+- **Isaac Sim**: consider it for richer rendering and GPU training on a
+  compatible workstation. Verify its [GPU and system requirements](https://docs.isaacsim.omniverse.nvidia.com/latest/installation/requirements.html)
+  before choosing it. Run heavy simulation on the workstation and use the
+  Jetson for the real robot stack.
+
+Gazebo and Isaac Sim integrations are not included in this playground.
+
 ## xArm6 + AG-95 in RViz
 
 The repo includes pinned xArm6 and DH AG-95 description macros and STL meshes.

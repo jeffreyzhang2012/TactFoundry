@@ -2,6 +2,48 @@
 
 ROS 2 tactile sensing workspace for NVIDIA Jetson Orin and real hardware.
 
+## xArm6 + AG-95 in RViz
+
+The repo includes pinned xArm6 and DH AG-95 description macros and STL meshes.
+The AG-95 is mounted at the xArm tool flange (`link_eef`). Six arm sliders and
+one gripper slider move the combined model; the other finger joints follow
+the gripper's URDF mimic relationships.
+
+In WSL Ubuntu 22.04 or on the Jetson:
+
+```bash
+source /opt/ros/humble/setup.bash
+cd ~/projects/TactFoundry
+rosdep install --from-paths src --ignore-src -r -y
+colcon build --symlink-install
+source install/setup.bash
+ros2 launch tactile_robot_description display.launch.py
+```
+
+Move `joint1` through `joint6` in the Joint State Publisher window. Move
+`ag95_left_outer_knuckle_joint` from 0 (open) toward 0.93 rad (closed) to move
+both fingers. RViz displays their movement together on the arm. The sliders
+publish visualization joint states; connecting a real controller is a separate
+integration step. This launch uses the nominal upstream xArm6 geometry and
+kinematics, without per-unit calibration or an actuator driver.
+
+The default flange-to-gripper transform is zero. Set the measured adapter
+translation in meters and rotation in radians if your physical mount differs:
+
+```bash
+ros2 launch tactile_robot_description display.launch.py \
+  mount_xyz:="0 0 0.02" mount_rpy:="0 0 1.5708"
+```
+
+Those values are an example, not measurements of your hardware. To run the
+joint-state/TF publishers without windows, use `gui:=false rviz:=false`.
+Windows graphics use WSLg; if RViz has graphics-driver problems, try
+`LIBGL_ALWAYS_SOFTWARE=1 ros2 launch tactile_robot_description display.launch.py`.
+
+Model provenance and retained licenses are in
+`src/vendor/xarm_description/UPSTREAM.md` (UFACTORY, BSD-3-Clause) and
+`src/vendor/dh_ag95_description/UPSTREAM.md` (AG-95 ROS 2 model, Apache-2.0).
+
 ## Platform
 
 Target: JetPack 6, Ubuntu 22.04 ARM64, ROS 2 Humble, Python 3.10.

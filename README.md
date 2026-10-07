@@ -32,7 +32,8 @@ publish visualization joint states; connecting a real controller is a separate
 integration step. This launch uses the nominal upstream xArm6 geometry and
 kinematics, without per-unit calibration or an actuator driver.
 
-The default flange-to-gripper transform is zero. Set the measured adapter
+The default gripper mount has zero translation and a +90-degree rotation
+around the flange Z axis. Set the measured adapter
 translation in meters and rotation in radians if your physical mount differs:
 
 ```bash

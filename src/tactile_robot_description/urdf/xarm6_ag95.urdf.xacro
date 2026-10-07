@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <robot name="xarm6_ag95" xmlns:xacro="http://ros.org/wiki/xacro">
   <xacro:arg name="mount_xyz" default="0 0 0"/>
-  <xacro:arg name="mount_rpy" default="0 0 0"/>
+  <xacro:arg name="mount_rpy" default="0 0 1.5707963267948966"/>
   <xacro:arg name="add_camera" default="true"/>
   <xacro:arg name="camera_mount_xyz" default="0 0 0"/>
   <xacro:arg name="camera_mount_rpy" default="0 0 0"/>

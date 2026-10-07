@@ -37,7 +37,7 @@ def generate_launch_description():
         DeclareLaunchArgument('rviz', default_value='true', choices=['true', 'false']),
         DeclareLaunchArgument('mount_xyz', default_value='0 0 0',
                               description='Flange-to-gripper translation in meters'),
-        DeclareLaunchArgument('mount_rpy', default_value='0 0 0',
+        DeclareLaunchArgument('mount_rpy', default_value='0 0 1.5707963267948966',
                               description='Flange-to-gripper rotation in radians'),
         DeclareLaunchArgument('add_camera', default_value='true', choices=['true', 'false'],
                               description='Attach the D435 camera and mounting kit'),

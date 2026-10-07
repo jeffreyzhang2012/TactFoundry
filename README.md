@@ -9,6 +9,11 @@ The AG-95 is mounted at the xArm tool flange (`link_eef`). Six arm sliders and
 one gripper slider move the combined model; the other finger joints follow
 the gripper's URDF mimic relationships.
 
+A RealSense D435 and UFACTORY camera mounting kit are attached to the wrist
+by default. The combined camera/stand mesh and nominal sensor frames come
+from the same pinned UFACTORY source as the arm. The assembly moves with
+the wrist; the gripper retains its independent open/close control.
+
 In WSL Ubuntu 22.04 or on the Jetson:
 
 ```bash
@@ -37,6 +42,15 @@ ros2 launch tactile_robot_description display.launch.py \
 
 Those values are an example, not measurements of your hardware. To run the
 joint-state/TF publishers without windows, use `gui:=false rviz:=false`.
+The camera kit has its own `camera_mount_xyz` and `camera_mount_rpy` arguments
+(meters/radians relative to `link_eef`); use `add_camera:=false` to hide it.
+The frame chain is `link_eef -> camera_mount_link -> d435_link_eef ->
+d435_camera_link`, with depth/color/left/right infrared optical frames below
+it. The nominal camera offsets should be calibrated to your actual mount
+before using camera data for robot motion. This display launch adds the
+camera model and TF frames; it does not start image acquisition. The upstream
+camera macro's legacy name contains `d435i`, but this assembly uses the
+`d435_with_cam_stand` mesh and does not add IMU frames.
 Windows graphics use WSLg; if RViz has graphics-driver problems, try
 `LIBGL_ALWAYS_SOFTWARE=1 ros2 launch tactile_robot_description display.launch.py`.
 

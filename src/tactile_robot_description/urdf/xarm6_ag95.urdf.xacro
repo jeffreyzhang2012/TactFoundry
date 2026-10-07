@@ -2,6 +2,9 @@
 <robot name="xarm6_ag95" xmlns:xacro="http://ros.org/wiki/xacro">
   <xacro:arg name="mount_xyz" default="0 0 0"/>
   <xacro:arg name="mount_rpy" default="0 0 0"/>
+  <xacro:arg name="add_camera" default="true"/>
+  <xacro:arg name="camera_mount_xyz" default="0 0 0"/>
+  <xacro:arg name="camera_mount_rpy" default="0 0 0"/>
   <xacro:property name="mesh_suffix" value="stl"/>
   <xacro:property name="mesh_path" value="package://xarm_description/meshes"/>
   <xacro:property name="use_xacro_load_yaml" value="true"/>
@@ -9,6 +12,7 @@
   <xacro:include filename="$(find xarm_description)/urdf/common/common.link.xacro"/>
   <xacro:include filename="$(find xarm_description)/urdf/xarm6/xarm6.urdf.xacro"/>
   <xacro:include filename="$(find dh_ag95_description)/urdf/dh_ag95_macro.xacro"/>
+  <xacro:include filename="$(find xarm_description)/urdf/camera/realsense_d435i.urdf.xacro"/>
   <xacro:common_material prefix=""/>
   <link name="world"/>
   <joint name="world_joint" type="fixed">
@@ -26,4 +30,19 @@
   <xacro:dh_ag95_gripper prefix="ag95_" parent="link_eef">
     <origin xyz="$(arg mount_xyz)" rpy="$(arg mount_rpy)"/>
   </xacro:dh_ag95_gripper>
+  <xacro:if value="$(arg add_camera)">
+    <xacro:common_material prefix="d435_"/>
+    <!-- The upstream macro uses the D435 camera-and-stand STL. Its legacy
+         name contains d435i, but it defines no IMU links or sensors. -->
+    <link name="camera_mount_link"/>
+    <joint name="camera_mount_joint" type="fixed">
+      <parent link="link_eef"/><child link="camera_mount_link"/>
+      <origin xyz="$(arg camera_mount_xyz)" rpy="$(arg camera_mount_rpy)"/>
+    </joint>
+    <xacro:d435i_urdf prefix="d435_" add_d435i_links="true"/>
+    <joint name="camera_kit_joint" type="fixed">
+      <parent link="camera_mount_link"/><child link="d435_link_eef"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </joint>
+  </xacro:if>
 </robot>

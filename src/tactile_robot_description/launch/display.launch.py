@@ -14,7 +14,8 @@ def launch_nodes(context):
     description = xacro.process_file(
         os.path.join(share, 'urdf', 'xarm6_ag95.urdf.xacro'),
         mappings={name: LaunchConfiguration(name).perform(context)
-                  for name in ('mount_xyz', 'mount_rpy')},
+                  for name in ('mount_xyz', 'mount_rpy', 'add_camera',
+                               'camera_mount_xyz', 'camera_mount_rpy')},
     ).toxml()
     gui = LaunchConfiguration('gui').perform(context).lower() == 'true'
     return [
@@ -38,5 +39,11 @@ def generate_launch_description():
                               description='Flange-to-gripper translation in meters'),
         DeclareLaunchArgument('mount_rpy', default_value='0 0 0',
                               description='Flange-to-gripper rotation in radians'),
+        DeclareLaunchArgument('add_camera', default_value='true', choices=['true', 'false'],
+                              description='Attach the D435 camera and mounting kit'),
+        DeclareLaunchArgument('camera_mount_xyz', default_value='0 0 0',
+                              description='Flange-to-camera-kit translation in meters'),
+        DeclareLaunchArgument('camera_mount_rpy', default_value='0 0 0',
+                              description='Flange-to-camera-kit rotation in radians'),
         OpaqueFunction(function=launch_nodes),
     ])

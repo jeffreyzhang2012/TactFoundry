@@ -5,7 +5,6 @@
   <description>Serial tactile hardware acquisition and health reporting.</description>
   <maintainer email="maintainers@example.com">Tact Foundry maintainers</maintainer>
   <license>Proprietary</license>
-  <buildtool_depend>ament_python</buildtool_depend>
   <exec_depend>rclpy</exec_depend>
   <exec_depend>tactile_interfaces</exec_depend>
   <exec_depend>diagnostic_msgs</exec_depend>

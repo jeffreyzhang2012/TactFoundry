@@ -17,9 +17,11 @@ HOME = (0., -0.6, -0.8, 0., 1.4, 0., 0.)
 
 
 class World:
-    def __init__(self, description, scene='playground', robot_model='uf850'):
+    def __init__(self, description, scene='playground', robot_model='uf850', gripper_effort=None):
         if scene not in ('playground', 'tabletop'):
             raise ValueError('unknown scene')
+        if gripper_effort is not None and (not math.isfinite(gripper_effort) or gripper_effort <= 0.):
+            raise ValueError('gripper_effort must be positive and finite')
         self.scene_kind = scene
         self.home = tabletop.HOMES[robot_model] if scene == 'tabletop' else HOME
         self.table_height = tabletop.TABLE_HEIGHT if scene == 'tabletop' else .06
@@ -59,6 +61,8 @@ class World:
                 name = info[1].decode()
                 self.joints[name] = i
                 self.limits[name] = (info[8], info[9], max(info[10], 1.))
+                if name.startswith('ag95_') and gripper_effort is not None:
+                    self.limits[name] = (info[8], info[9], min(self.limits[name][2], gripper_effort))
             p.changeDynamics(self.robot, i, lateralFriction=1.2,
                              physicsClientId=self.client)
         for joint in robot.findall('joint'):

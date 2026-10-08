@@ -14,6 +14,9 @@ With the model server running, use `bash tools/pi05/live.sh` to watch fresh
 
 ## Demo-style tabletop for the 850 + AG95
 
+For robot-specific π0.5 simulation adaptation, see
+[the demonstration and LoRA training pipeline](tools/pi05/uf850/README.md).
+
 ```bash
 cd ~/projects/TactFoundry
 source /opt/ros/humble/setup.bash

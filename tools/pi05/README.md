@@ -74,6 +74,11 @@ This is one successful episode, not a benchmark-wide success-rate measurement.
 
 ## Fine-tuning for our robot later
 
+The first simulation adaptation pipeline now lives in
+[uf850/README.md](uf850/README.md): verified physical-contact demonstrations,
+robot-specific joint actions, separate held-out episodes, LoRA training and
+simulation policy rollout. This is separate from the official LIBERO demo.
+
 1. Record synchronized wrist RGB, preferably an external RGB view, six arm joint
    positions, AG95 opening, actual commanded actions, timestamps, and task text
    from successful teleoperated 850 demonstrations. Keep the camera calibration

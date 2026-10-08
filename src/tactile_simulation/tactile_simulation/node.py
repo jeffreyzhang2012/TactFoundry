@@ -23,11 +23,13 @@ class Playground(Node):
         for name, value in [('robot_description', ''), ('camera_source', 'sim'),
                             ('object_kind', 'mixed'), ('object_count', 8), ('seed', 42),
                             ('scene', 'playground'), ('robot_model', 'uf850'),
+                            ('gripper_effort', 50.),
                             ('gamepad', False), ('stick_plane', 'xz'), ('force_arrow_scale', .01)]:
             self.declare_parameter(name, value)
         self.world = World(self.get_parameter('robot_description').value,
                            self.get_parameter('scene').value,
-                           self.get_parameter('robot_model').value)
+                           self.get_parameter('robot_model').value,
+                           self.get_parameter('gripper_effort').value)
         self.external = self.world.scene_kind == 'tabletop'
         if self.external:
             self.camera_tf = StaticTransformBroadcaster(self)

@@ -61,7 +61,7 @@ def generate_launch_description():
         DeclareLaunchArgument('gui', default_value='true', choices=['true', 'false']),
         DeclareLaunchArgument('gamepad', default_value='false', choices=['true', 'false']),
         DeclareLaunchArgument('device_id', default_value='0'),
-        DeclareLaunchArgument('stick_plane', default_value='yz', choices=['yz', 'xy']),
+        DeclareLaunchArgument('stick_plane', default_value='xy', choices=['yz', 'xy']),
         DeclareLaunchArgument('rviz', default_value='true', choices=['true', 'false']),
         DeclareLaunchArgument('mount_xyz', default_value='0 0 0'),
         DeclareLaunchArgument('mount_rpy', default_value='0 0 1.5707963267948966'),

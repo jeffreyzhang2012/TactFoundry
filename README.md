@@ -251,18 +251,18 @@ Connect a DualSense controller to Ubuntu, then launch:
 ros2 launch tactile_simulation playground.launch.py gamepad:=true
 ```
 
-Hold **L1** while moving. Left stick left/right moves along world Y (left/right);
-left stick forward/back moves along world Z (up/down), as requested. D-pad
-up/down moves along world X (forward/back). Right stick up/down controls pitch,
+Hold **L1** while moving. Left stick left/right moves along world X;
+left stick forward/back moves along world Y (forward is positive Y). D-pad
+up/down moves along world Z (height). Right stick up/down controls pitch,
 left/right controls yaw; R2 rolls positive and L2 rolls negative. These rotation
 rates use fixed world axes. Cross closes the gripper; Circle opens it.
-For conventional horizontal left-stick movement and D-pad height control, add
-`stick_plane:=xy`. Select another controller with `device_id:=1`.
+This is the default `stick_plane:=xy` mapping. For the earlier Y/Z stick mapping,
+add `stick_plane:=yz`. Select another controller with `device_id:=1`.
 
 Controller mode disables slider commands so they cannot fight the gamepad; sliders
 show commanded positions. Motion uses damped differential inverse kinematics at a
 nominal gripper center 150 mm from its base, with joint limits, a 0.5 rad/s joint
-speed cap, 0.06 m/s translation and 0.4 rad/s rotation. Releasing L1 or receiving
+speed cap, 0.35 m/s translation and 0.4 rad/s rotation. Releasing L1 or receiving
 no valid input for 250 ms holds the current target. Reset clears pending input.
 This controls the physics playground; a real-arm Cartesian driver is not connected.
 

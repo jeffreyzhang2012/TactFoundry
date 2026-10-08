@@ -23,6 +23,8 @@ def main():
     parser.add_argument('--resume',action='store_true')
     parser.add_argument('--state-min-range',type=float,default=0.)
     parser.add_argument('--action-min-range',type=float,default=0.)
+    parser.add_argument('--selection-manifest',type=Path,
+                        help='Resample initial target-selection frames using a matched-layout training split')
     args=parser.parse_args()
     if args.steps<1 or args.batch_size<1 or not np.isfinite([args.state_min_range,args.action_min_range]).all() or min(args.state_min_range,args.action_min_range)<0:
         parser.error('steps and batch size must be positive; normalization ranges must be finite and nonnegative')
@@ -47,6 +49,11 @@ def main():
             normalize.save(path,stats)
             (path/'normalization_floor.json').write_text(json.dumps({'state_min_range_rad':args.state_min_range,
                                                                   'action_min_range_rad':args.action_min_range},indent=2))
+    elif args.selection_manifest:
+        from focus_sampling import selection_sampling
+        with selection_sampling(args.repo_id,args.selection_manifest,args.root/'sampling-profile.json') as profile:
+            cfg=dataclasses.replace(cfg,policy_metadata={**cfg.policy_metadata,'training_sampling':profile['name']})
+            module.main(cfg)
     else: module.main(cfg)
 
 if __name__=='__main__': main()

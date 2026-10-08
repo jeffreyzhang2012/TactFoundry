@@ -44,7 +44,17 @@ def solve_pose(world, xyz):
         lo = [world.limits[name][0]+.0001 for name in ARM]
         hi = [world.limits[name][1]-.0001 for name in ARM]
         seed = np.clip([world.targets[name] for name in ARM], lo, hi)
-        result = least_squares(residual, seed, bounds=(lo, hi), diff_step=.001, max_nfev=200)
+        def jacobian(q):
+            # PyBullet link poses are float32. Relative differences become too
+            # small at near-zero joints; use a fixed angular step instead.
+            columns=[]
+            for i in range(6):
+                lower,upper=q.copy(),q.copy()
+                lower[i]=max(lo[i],q[i]-.001)
+                upper[i]=min(hi[i],q[i]+.001)
+                columns.append((residual(upper)-residual(lower))/(upper[i]-lower[i]))
+            return np.column_stack(columns)
+        result = least_squares(residual, seed, bounds=(lo, hi), jac=jacobian, max_nfev=200)
         if np.linalg.norm(residual(result.x)) > .002:
             raise RuntimeError(f'IK cannot reach {xyz}')
         return result.x

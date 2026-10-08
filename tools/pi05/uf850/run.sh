@@ -14,6 +14,9 @@ case "${1:-}" in
   generate)
     shift
     exec python3 "$script_dir/generate.py" --output "$data_dir" "$@" ;;
+  generate-multi)
+    shift
+    exec python3 "$script_dir/multitask.py" --output "$data_dir" "$@" ;;
   convert)
     shift
     exec "$python" "$script_dir/convert.py" --source "$data_dir" --repo-id "$repo_id" "$@" ;;
@@ -32,7 +35,10 @@ case "${1:-}" in
   rollout)
     shift
     exec python3 "$script_dir/rollout.py" --output "$root/rollouts" "$@" ;;
+  language-probe)
+    shift
+    exec "$python" "$script_dir/language_probe.py" --source "$data_dir" --output "$root/language-grounding.json" "$@" ;;
   *)
-    echo 'Usage: run.sh {generate|convert|download|stats|train|evaluate|serve|rollout} [options]' >&2
+    echo 'Usage: run.sh {generate|generate-multi|convert|download|stats|train|evaluate|serve|rollout|language-probe} [options]' >&2
     exit 2 ;;
 esac

@@ -16,6 +16,8 @@ def placement_checks(*, grasped_and_lifted, distance, upright, plate_contact,
 class PlacementEvaluator:
     def __init__(self, world, body, plate):
         self.world, self.body, self.plate = world, body, plate
+        kind=next(obj['kind'] for obj in world.objects.values() if obj['body']==body)
+        self.require_upright=kind!='cube'  # A cube may rest on any face.
         self.initial_height = p.getBasePositionAndOrientation(body, physicsClientId=world.client)[0][2]
         self.max_height = self.initial_height
         self.bilateral = self.lifted = self.grasped_and_lifted = False
@@ -35,7 +37,7 @@ class PlacementEvaluator:
         robot_contacts = p.getContactPoints(bodyA=self.body, bodyB=w.robot, physicsClientId=w.client)
         distance = float(np.linalg.norm(np.asarray(xyz[:2]) - plate_xyz[:2]))
         checks = placement_checks(grasped_and_lifted=self.grasped_and_lifted,
-            distance=distance, upright=p.getMatrixFromQuaternion(quat)[8],
+            distance=distance, upright=p.getMatrixFromQuaternion(quat)[8] if self.require_upright else 1.,
             plate_contact=any(c[9] > .01 for c in plate_contacts),
             released=w.targets[JOINTS[-1]] < .1,
             robot_contact=any(c[9] > .05 for c in robot_contacts),

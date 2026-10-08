@@ -206,8 +206,9 @@ body**, not whichever object the robot happens to touch:
 
 - Bilateral jaw contact while its center rises at least 4 cm from its initial
   settled height.
-- Its center is within 25 mm of the plate center, with actual plate contact
-  and an upright orientation (local vertical dot world vertical > 0.8).
+- Its center is within 25 mm of the plate center, with actual plate contact.
+  Bowl and bottle must be upright (local vertical dot world vertical > 0.8);
+  the cubic block may rest on any face.
 - The commanded gripper is open (<0.1 rad), with no load-bearing robot contact.
 - Linear speed <0.01 m/s and angular speed <0.1 rad/s continuously for at
   least the last second of a two-second settling period.
@@ -235,3 +236,160 @@ extrinsic calibration update alone does not adapt this raw-RGB policy to a
 new viewpoint. Small camera shifts may work and should be tested; substantial
 changes call for demonstrations from the new view and fine-tuning. Training
 across camera poses reduces reliance on one fixed placement.
+
+## Balanced tasks and excluded layouts
+
+`multitask.py` records matched demonstrations for black bowl, green bottle
+and red block. Each accepted layout has **three episodes with identical
+initial pixels and state, but different target instructions and actions**.
+Object identities are permuted among three workspace areas near the original
+bowl/bottle/block positions. XY positions and the plate position receive
+random jitter. All three objects visit all three slots during training.
+Four complete permutations are used for training and two different complete
+permutations are reserved for validation and unseen-layout rollouts.
+All instructions from one layout stay in the same split. Camera poses,
+geometry and lighting remain fixed; this is not a camera-robustness dataset.
+
+The teacher accounts for each object's settled height and jaw closure.
+It grasps with physical contact, lifts, places and retreats, with no object
+attachment or manipulation-time object reset. Only layouts where **every
+target** passes the physical scoring checks are recorded. This selects
+teacher-reachable cases, not every possible pose. Each object has three
+instruction variants. Balanced sampling helps teach instruction grounding;
+it does not guarantee semantic or physical generalization.
+
+The multi-object wrapper selects new directories and initializes from the
+previous `refine500/499` checkpoint; it preserves the previous model/data:
+
+```bash
+bash tools/pi05/uf850/multi.sh generate-multi --train-layouts 24 --heldout-layouts 6
+bash tools/pi05/uf850/multi.sh convert
+bash tools/pi05/uf850/multi.sh stats --steps 2000 --state-min-range .02 --action-min-range .002
+# Stop the earlier policy server to free GPU memory first.
+bash tools/pi05/uf850/multi.sh train --steps 2000 --exp-name multi2000
+checkpoint="$HOME/projects/TactFoundry/data/uf850_tuning_multi_v3/checkpoints/pi05_uf850_lora/multi2000/1999"
+bash tools/pi05/uf850/multi.sh evaluate --checkpoint "$checkpoint" --samples 96
+bash tools/pi05/uf850/multi.sh serve --checkpoint "$checkpoint"
+# Second terminal: these seeds are excluded from generation and training.
+bash tools/pi05/uf850/multi.sh rollout --object distractor_block --layout heldout \
+  --seed 5001 --episodes 3 --max-steps 400 --headless --output data/multi_red_tests
+bash tools/pi05/uf850/multi.sh language-probe
+```
+
+The completed split has 72 training / 18 validation episodes (24 / 6 complete
+layouts), totaling 24,255 / 6,060 frames. The run added 2,000 gradient updates, with batch size 4 and unchanged
+LoRA/action conventions. Raw data live in `data/uf850_multi_sim_v3_wide/`,
+the LeRobot repo is `tactfoundry/uf850_multi_sim_v3`, and checkpoints/results
+live in `data/uf850_tuning_multi_v3/`. None are uploaded to GitHub.
+
+`language-probe` fixes images, state and diffusion noise while changing only
+the instruction, then compares the predicted initial reach with the three
+teacher branches. Its branch-agreement score is an imitation diagnostic,
+not a grasp-success metric. Actual rollouts report which objects were
+grasped/lifted, task success, failures, videos and traces. Novel layouts test
+spatial transfer with familiar objects. New object geometry, colors, cameras,
+backgrounds, tasks and real hardware require separate evaluation and often
+additional demonstrations; broad language knowledge alone is not proof of
+correct robot control.
+
+## Emphasizing the initial target choice
+
+The first multi-object pass achieved arm MAE 0.00534 rad and gripper MAE
+0.01369 rad on 96 sampled validation chunks, but its controlled first-reach
+diagnostic matched only **6/18 requested teacher branches**. All three
+instructions produced the same nearest branch in each validation scene.
+Distinct target prompts were verified at the model's tokenized input; this
+was not a missing-text transport bug. Uniform full-trajectory training gave
+little weight to the initial instruction-dependent decision.
+
+Completed physical tests of `multi2000/1999` scored **0/3 per target** on
+excluded layouts (seeds 5001–5003), and **0/1 per target** in the original
+scene (seed 601). The previous bowl-only policy also scored 0/9 on the same
+excluded-layout starts. These outcomes are retained, including failure
+videos; the multi-object pass has not established task generalization.
+
+`focus_sampling.py` therefore resamples only existing training frames for
+an additional pass. It excludes the 12 pre-task idle frames, repeats frame
+12 with weight 100 and frames 13–41 with weight 8, and balances those weights
+by object/slot frequency. Later frames retain weight 1. The resulting
+45,227 virtual sample indices reference the original 24,255 training frames;
+action chunks retain their original time context. No demonstrations or
+synthetic actions are added. Validation layouts remain excluded.
+
+The completed focused pass has arm MAE **0.00679 rad**, gripper MAE
+**0.01347 rad**, and still matches only **6/18** first-reach branches on the
+same controlled validation diagnostic. Resampling alone did not establish
+instruction grounding. Its loss reached 0.0036 at the last logged update;
+that loss is measured under a different sampling distribution from the
+uniform pass and should not be treated as a direct comparison.
+
+The focused checkpoint `grounding1000/999` completed the following tests:
+
+| Requested object | Fresh excluded layouts (6001–6003) | Original scene (601) | IK teacher on fresh layouts |
+| --- | --- | --- | --- |
+| Black bowl | 0/3 | 0/1 | 3/3 |
+| Green bottle | 0/3 | 0/1 | 2/3 |
+| Red block | 0/3 | 0/1 | 2/3 |
+
+No requested object met the grasp-and-lift criterion in these 12 policy trials.
+The IK reference uses ground-truth poses, not policy actions; it is a separate
+physical reference and not a success claim for π0.5. All nine predetermined
+fresh starts were retained, including the two teacher failures.
+
+A second controlled probe on six **training** layouts also matched only
+6/18 instruction branches. Each scene selected the same branch for all
+three prompts. Target selection was therefore not learned reliably even
+on those training observations; this is not just a novel-layout problem.
+The checkpoint remains experimental. More updates alone are not an
+established remedy: clearer target views and explicit target-selection
+supervision are candidate next investigations, followed by fresh physical
+tests and demonstrations with recovery states.
+
+Local Windows reports, JSON/NPZ traces and videos are under
+`data/uf850_tuning/multi_v3/` and `data/uf850_tuning/multi_v4/`. The latter
+contains `training-results.png`, `training-summary.json`,
+`training-language-probe.json`, and combined `unseen_<object>.mp4` files.
+The final policy server serves the focused checkpoint on localhost:8001.
+Fourteen relevant tests passed, including physical teacher replay, target
+scoring, near-zero-joint IK and split/resampling checks; Python compilation
+and shell syntax checks also passed. Weights and raw data remain local.
+
+The focused pass initializes from `multi2000/1999`, reuses its normalization,
+and saves independently under `data/uf850_tuning_multi_v4/`. It adds 1,000
+updates (4,500 total in checkpoint ancestry). Stop the running policy server
+before training or evaluating to free GPU memory:
+
+```bash
+bash tools/pi05/uf850/focus.sh train
+bash tools/pi05/uf850/focus.sh evaluate
+bash tools/pi05/uf850/focus.sh serve
+# Another terminal: fresh seeds excluded from demonstrations and earlier rollouts.
+bash tools/pi05/uf850/focus.sh rollout --object distractor_block --layout heldout \
+  --seed 6001 --episodes 3 --max-steps 400 --headless --output data/focus_red_tests
+```
+
+Headless rollouts render the same 224-pixel policy observations and recorded
+videos, but skip the extra full-resolution ROS camera streams. This saves
+rendering time without changing physics steps or action timing. Add
+`--publish-ros-images` if a remote ROS viewer needs those streams. Interactive
+RViz rollouts publish them automatically.
+
+`report.py` creates a JSON summary, loss/action-error/physical-success plot,
+and one combined video per target from completed evaluations. It expects
+`unseen_layouts/<object>/results.json` for all three targets:
+
+```bash
+$HOME/projects/openpi/.venv/bin/python tools/pi05/uf850/report.py \
+  --root data/uf850_tuning_multi_v4 --source data/uf850_multi_sim_v3_wide \
+  --train-log log/uf850-focus-train.log --output data/uf850_tuning/multi_v4 \
+  --updates 1000 --ancestry-updates 4500
+```
+
+Language pretraining provides semantic priors, but the new camera views,
+UF850 joint representation and AG95 grasp mechanics still need grounded
+robot demonstrations. The [π0.5 paper](https://arxiv.org/abs/2504.16054)
+attributes broad generalization to co-training across robot data, semantic
+tasks and web data. This small local fine-tune does not reproduce that
+coverage. Its excluded-layout tests measure spatial transfer for three
+familiar objects with fixed cameras; they do not establish novel-object,
+viewpoint, task or real-hardware generalization.

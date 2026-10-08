@@ -15,6 +15,8 @@ def main():
     parser.add_argument('--checkpoint',type=Path,required=True)
     parser.add_argument('--repo-id',default='tactfoundry/uf850_bowl_sim_v1')
     parser.add_argument('--samples',type=int,default=32)
+    parser.add_argument('--language-probe-source',type=Path,
+                        help='Raw matched-layout dataset for controlled instruction sensitivity measurements')
     args=parser.parse_args()
     cfg=make_config(args.root,args.repo_id,args.weights)
     policy=policy_config.create_trained_policy(cfg,args.checkpoint)
@@ -42,5 +44,11 @@ def main():
             'note':'Held-out action prediction error only; does not establish closed-loop grasp success.'}
     (args.root/'heldout-evaluation.json').write_text(json.dumps(result,indent=2))
     print(json.dumps(result,indent=2),flush=True)
+    if args.language_probe_source:
+        from language_probe import measure_grounding
+        report=measure_grounding(policy.infer,args.language_probe_source,
+                                 {**cfg.policy_metadata,'checkpoint':str(args.checkpoint)})
+        (args.root/'language-grounding.json').write_text(json.dumps(report,indent=2))
+        print(json.dumps(report,indent=2),flush=True)
 
 if __name__=='__main__': main()

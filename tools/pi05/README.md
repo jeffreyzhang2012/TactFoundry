@@ -44,6 +44,26 @@ LIBERO environment, not inferred from appearance. The renderer uses Xvfb and
 software GL so it can run without a visible simulator window. Install `xvfb`
 and `libgl1-mesa-dri` if absent. `OPENPI_DIR` selects an alternate installation.
 
+## Live RViz view
+
+With the model server already running, open live visualization in WSL:
+
+```bash
+bash tools/pi05/live.sh
+```
+
+This opens a separate RViz window on ROS domain 43, displaying the actual
+LIBERO robot/object poses and external/wrist image topics. Each episode runs
+fresh pi0.5 inference, holds its final state for five seconds, then restarts.
+Use Ctrl+C to stop. The model server stays available on port 8000.
+
+`/pi05/scene` contains visible MuJoCo geometry exported as mesh/primitive
+markers; materials use solid colors (textures and capsule end caps are not
+reproduced). The camera images are the actual simulator renders. `/pi05/image/image_raw`
+and `/pi05/wrist/image_raw` carry the live RGB feeds. A localhost TCP bridge
+separates LIBERO's Python 3.8 environment from ROS Humble's Python 3.10.
+Mesh caches and recorded episodes stay under the ignored `data/` directory.
+
 ## Verified run
 
 On October 8, 2026, task 0 / episode 0 of `libero_spatial` with seed 7 succeeded:

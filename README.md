@@ -9,6 +9,9 @@ see [setup, run commands, and 850 fine-tuning plan](tools/pi05/README.md).
 This uses the matching LIBERO benchmark robot; the public checkpoint is not
 a trained controller for our 850 + AG95 setup.
 
+With the model server running, use `bash tools/pi05/live.sh` to watch fresh
+π0.5 episodes in RViz with live robot/object geometry and both camera views.
+
 ## Simulated jaw force
 
 RViz's **Jaw force arrows** display shows solved contact reactions on each AG95

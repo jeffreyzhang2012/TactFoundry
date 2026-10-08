@@ -1,0 +1,48 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/MarkerArray
+      Name: Live pi0.5 robot and objects
+      Enabled: true
+      Topic:
+        Value: /pi05/scene
+        Reliability Policy: Reliable
+        Durability Policy: Transient Local
+        Depth: 1
+    - Class: rviz_default_plugins/Image
+      Name: Live external camera
+      Enabled: true
+      Topic:
+        Value: /pi05/image/image_raw
+        Reliability Policy: Reliable
+        Durability Policy: Volatile
+        Depth: 1
+    - Class: rviz_default_plugins/Image
+      Name: Live wrist camera
+      Enabled: true
+      Topic:
+        Value: /pi05/wrist/image_raw
+        Reliability Policy: Reliable
+        Durability Policy: Volatile
+        Depth: 1
+  Global Options:
+    Fixed Frame: world
+    Background Color: 32; 38; 49
+    Frame Rate: 30
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Target Frame: world
+      Distance: 2.7
+      Pitch: 0.5
+      Yaw: 0.8
+      Focal Point:
+        X: 0
+        Y: 0
+        Z: 0.8
+Window Geometry:
+  Width: 1400
+  Height: 900

@@ -15,6 +15,9 @@ parser.add_argument('--episode', type=int, default=0)
 parser.add_argument('--port', type=int, default=8000)
 parser.add_argument('--seed', type=int, default=7)
 parser.add_argument('--output', type=Path, default=Path('data/pi05_demo'))
+parser.add_argument('--live-port', type=int, default=0)
+parser.add_argument('--step-seconds', type=float, default=0.)
+parser.add_argument('--hold-seconds', type=float, default=0.)
 args = parser.parse_args()
 
 # Avoid upstream's interactive first-import dataset prompt; no training data is required.
@@ -51,17 +54,23 @@ success = False
 max_steps = {'libero_spatial': 220, 'libero_object': 280, 'libero_goal': 300,
              'libero_10': 520, 'libero_90': 400}[args.suite]
 started = time.monotonic()
+live = None
 try:
     env.reset()
     obs = env.set_init_state(suite.get_task_init_states(args.task)[args.episode])
     for _ in range(10):
         obs, _, _, _ = env.step(official.LIBERO_DUMMY_ACTION)
+    if args.live_port:
+        from live_stream import LiveStream
+        live = LiveStream(env, args.output, args.live_port)
     for step in range(max_steps):
         image = image_tools.convert_to_uint8(image_tools.resize_with_pad(
             np.ascontiguousarray(obs['agentview_image'][::-1, ::-1]), 224, 224))
         wrist = image_tools.convert_to_uint8(image_tools.resize_with_pad(
             np.ascontiguousarray(obs['robot0_eye_in_hand_image'][::-1, ::-1]), 224, 224))
         frames.append(np.concatenate((image, wrist), axis=1))
+        if live:
+            live.publish(image, wrist, prompt, step, 'running pi0.5')
         if not action_plan:
             t0 = time.monotonic()
             actions = np.asarray(client.infer({
@@ -77,7 +86,22 @@ try:
         obs, _, success, _ = env.step(action_plan.popleft().tolist())
         if success:
             break
+        if args.step_seconds:
+            time.sleep(args.step_seconds)
+    if live:
+        image = image_tools.convert_to_uint8(image_tools.resize_with_pad(
+            np.ascontiguousarray(obs['agentview_image'][::-1, ::-1]), 224, 224))
+        wrist = image_tools.convert_to_uint8(image_tools.resize_with_pad(
+            np.ascontiguousarray(obs['robot0_eye_in_hand_image'][::-1, ::-1]), 224, 224))
+        deadline = time.monotonic() + args.hold_seconds
+        while True:
+            live.publish(image, wrist, prompt, step+1, 'SUCCESS' if success else 'episode finished')
+            if time.monotonic() >= deadline:
+                break
+            time.sleep(.1)
 finally:
+    if live:
+        live.close()
     env.close()
 args.output.mkdir(parents=True, exist_ok=True)
 stem = f'{args.suite}_task{args.task}_episode{args.episode}'

@@ -16,7 +16,7 @@ class Playground(Node):
         super().__init__('tactile_playground')
         for name, value in [('robot_description', ''), ('camera_source', 'sim'),
                             ('object_kind', 'mixed'), ('object_count', 8), ('seed', 42),
-                            ('gamepad', False), ('stick_plane', 'xy')]:
+                            ('gamepad', False), ('stick_plane', 'xz')]:
             self.declare_parameter(name, value)
         self.world = World(self.get_parameter('robot_description').value)
         count = self.get_parameter('object_count').value
@@ -57,7 +57,8 @@ class Playground(Node):
         if self.get_parameter('gamepad').value:
             twist, grip = self.pad.command(time.monotonic())
             if any(twist) or grip:
-                self.world.cartesian_command(twist, grip, 1/60)
+                self.world.cartesian_command(twist, grip, 1/60,
+                                             frame='d435_camera_color_optical_frame')
             target = JointState()
             target.name, target.position = list(self.world.targets), list(self.world.targets.values())
             self.targets.publish(target)

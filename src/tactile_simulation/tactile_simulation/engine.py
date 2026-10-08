@@ -100,10 +100,20 @@ class World:
         for _ in range(4):
             p.stepSimulation(physicsClientId=self.client)
 
-    def cartesian_command(self, twist, grip, dt):
-        """Damped differential IK at the gripper center; world-frame XYZ/RPY rates."""
+    def twist_to_world(self, twist, frame):
+        """Rotate linear and angular rates at the tool center into world axes."""
+        state = p.getLinkState(self.robot, self.links[frame], computeForwardKinematics=True,
+                               physicsClientId=self.client)
+        rotation = np.asarray(p.getMatrixFromQuaternion(state[5])).reshape(3, 3)
+        return np.concatenate((rotation @ np.asarray(twist[:3]),
+                               rotation @ np.asarray(twist[3:])))
+
+    def cartesian_command(self, twist, grip, dt, frame=None):
+        """Damped differential IK; optionally express rates in a moving link frame."""
         if len(twist) != 6 or not np.isfinite(twist).all() or not math.isfinite(grip):
             return
+        if frame is not None:
+            twist = self.twist_to_world(twist, frame)
         names, positions = self.joint_states()
         linear, angular = p.calculateJacobian(
             self.robot, self.links['ag95_ag95_base_link'], [0., 0., .15], positions,

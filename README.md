@@ -251,13 +251,15 @@ Connect a DualSense controller to Ubuntu, then launch:
 ros2 launch tactile_simulation playground.launch.py gamepad:=true
 ```
 
-Hold **L1** while moving. Left stick left/right moves along world Y;
-left stick forward/back moves along world X (forward is positive X). D-pad
-up/down moves along world Z (height). Right stick up/down controls pitch,
+Hold **L1** while moving. Controls follow the moving D435 color camera frame.
+Left stick left/right moves left/right in the camera view; forward/back moves
+along the camera viewing direction. D-pad up/down moves up/down in the view.
+Right stick up/down controls pitch,
 left/right controls yaw; R2 rolls positive and L2 rolls negative. These rotation
-rates use fixed world axes. Cross closes the gripper; Circle opens it.
-This is the default `stick_plane:=xy` mapping. For the earlier Y/Z stick mapping,
-add `stick_plane:=yz`. Select another controller with `device_id:=1`.
+rates also follow the camera axes. Cross closes the gripper; Circle opens it.
+The optical frame uses X right, Y down, Z forward, so this is the default
+`stick_plane:=xz` mapping. `stick_plane:=xy` moves the stick in the image plane
+and uses the D-pad for depth. Select another controller with `device_id:=1`.
 
 Controller mode disables slider commands so they cannot fight the gamepad; sliders
 show commanded positions. Motion uses damped differential inverse kinematics at a

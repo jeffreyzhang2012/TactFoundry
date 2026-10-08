@@ -75,3 +75,29 @@ def test_cartesian_ik_moves_tool_and_respects_joint_limits(world):
     for name, value in world.targets.items():
         lower, upper, _ = world.limits[name]
         assert lower <= value <= upper
+
+
+def test_camera_relative_motion_follows_wrist_orientation(world):
+    frame = 'd435_camera_color_optical_frame'
+    local = [0., 0., .02, .1, 0., 0.]
+    def orientation():
+        state = p.getLinkState(world.robot, world.links[frame], computeForwardKinematics=True,
+                               physicsClientId=world.client)
+        return np.asarray(p.getMatrixFromQuaternion(state[5])).reshape(3, 3)
+    rotation = orientation()
+    mapped = world.twist_to_world(local, frame)
+    assert np.allclose(mapped[:3], rotation[:, 2] * .02)
+    assert np.allclose(mapped[3:], rotation[:, 0] * .1)
+    p.resetJointState(world.robot, world.joints['joint1'], .8, physicsClientId=world.client)
+    assert not np.allclose(mapped, world.twist_to_world(local, frame))
+    state = p.getLinkState(world.robot, world.links['ag95_ag95_base_link'],
+                           computeForwardKinematics=True, physicsClientId=world.client)
+    start = np.asarray(p.multiplyTransforms(state[4], state[5], [0., 0., .15], [0., 0., 0., 1.])[0])
+    forward = orientation()[:, 2]
+    for _ in range(120):
+        world.cartesian_command([0., 0., .02, 0., 0., 0.], 0., 1/60, frame=frame)
+        world.step()
+    state = p.getLinkState(world.robot, world.links['ag95_ag95_base_link'],
+                           computeForwardKinematics=True, physicsClientId=world.client)
+    end = np.asarray(p.multiplyTransforms(state[4], state[5], [0., 0., .15], [0., 0., 0., 1.])[0])
+    assert np.dot(end - start, forward) > .01

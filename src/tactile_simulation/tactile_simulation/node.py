@@ -5,7 +5,10 @@ from rclpy.qos import QoSProfile, DurabilityPolicy, qos_profile_sensor_data
 from sensor_msgs.msg import CameraInfo, Image, JointState, Joy
 from std_srvs.srv import Trigger
 from std_msgs.msg import Float32
-from geometry_msgs.msg import WrenchStamped
+from geometry_msgs.msg import WrenchStamped, TransformStamped, Point
+from tf2_ros import StaticTransformBroadcaster
+import pybullet as p
+from . import tabletop
 from tactile_interfaces.srv import SpawnObjects
 from visualization_msgs.msg import Marker, MarkerArray
 
@@ -19,9 +22,24 @@ class Playground(Node):
         super().__init__('tactile_playground')
         for name, value in [('robot_description', ''), ('camera_source', 'sim'),
                             ('object_kind', 'mixed'), ('object_count', 8), ('seed', 42),
+                            ('scene', 'playground'), ('robot_model', 'uf850'),
                             ('gamepad', False), ('stick_plane', 'xz'), ('force_arrow_scale', .01)]:
             self.declare_parameter(name, value)
-        self.world = World(self.get_parameter('robot_description').value)
+        self.world = World(self.get_parameter('robot_description').value,
+                           self.get_parameter('scene').value,
+                           self.get_parameter('robot_model').value)
+        self.external = self.world.scene_kind == 'tabletop'
+        if self.external:
+            self.camera_tf = StaticTransformBroadcaster(self)
+            transform = TransformStamped()
+            transform.header.stamp = self.get_clock().now().to_msg()
+            transform.header.frame_id = 'world'
+            transform.child_frame_id = 'external_camera_optical_frame'
+            xyz, rpy = tabletop.optical_pose()
+            transform.transform.translation.x, transform.transform.translation.y, transform.transform.translation.z = xyz
+            q = p.getQuaternionFromEuler(rpy)
+            transform.transform.rotation.x, transform.transform.rotation.y, transform.transform.rotation.z, transform.transform.rotation.w = q
+            self.camera_tf.sendTransform(transform)
         count = self.get_parameter('object_count').value
         if count:
             self.world.spawn(self.get_parameter('object_kind').value, count,
@@ -40,7 +58,7 @@ class Playground(Node):
         self.normal_loads = {side: self.create_publisher(Float32,
             f'simulation/jaw_forces/{side}/normal_load', 10) for side in ('left', 'right')}
         self.images, self.infos = {}, {}
-        for sensor in ('color', 'depth'):
+        for sensor in ('color', 'depth', 'external', 'external_depth'):
             self.images[sensor] = self.create_publisher(Image, f'camera/{sensor}/image_raw',
                                                        qos_profile_sensor_data)
             self.infos[sensor] = self.create_publisher(CameraInfo, f'camera/{sensor}/camera_info',
@@ -48,9 +66,10 @@ class Playground(Node):
         self.create_service(SpawnObjects, 'scene/spawn_objects', self.spawn)
         self.create_service(Trigger, 'scene/clear_objects', self.clear)
         self.create_service(Trigger, 'scene/reset_arm', self.reset)
+        self.create_service(Trigger, 'scene/reset_layout', self.reset_layout)
         self.create_timer(1/60, self.physics)
         self.create_timer(0.2, self.scene)
-        if self.get_parameter('camera_source').value == 'sim':
+        if self.get_parameter('camera_source').value == 'sim' or self.external:
             self.create_timer(0.1, self.camera)
         self.get_logger().info('Playground ready: scene services and physical joint-state feedback')
 
@@ -104,6 +123,16 @@ class Playground(Node):
         res.success, res.message = True, 'Objects cleared'
         return res
 
+    def reset_layout(self, req, res):
+        self.world.reset_scene()
+        count = self.get_parameter('object_count').value
+        if self.world.scene_kind == 'playground' and count:
+            self.world.spawn(self.get_parameter('object_kind').value, count,
+                             self.get_parameter('seed').value)
+        self.scene()
+        res.success, res.message = True, 'Original scene layout restored'
+        return res
+
     def reset(self, req, res):
         self.pad.received = -float('inf')
         self.world.reset_arm()
@@ -132,25 +161,52 @@ class Playground(Node):
         message = MarkerArray()
         clear = Marker()
         clear.action = Marker.DELETEALL
-        message.markers = [clear,
-            self.marker(0, 'box', (0.64, 0.5, 0.02), (0.415, 0., 0.05),
-                        (0., 0., 0., 1.), (0.55, 0.42, 0.28, 1.))]
+        message.markers = [clear]
+        for mid, (size, xyz, color) in enumerate(self.world.fixtures):
+            message.markers.append(self.marker(-mid-1, 'box', size, xyz,
+                                                (0., 0., 0., 1.), color))
+        if self.external:
+            xyz, rpy = tabletop.optical_pose()
+            message.markers.append(self.marker(-100, 'box', (.08, .045, .035), xyz,
+                p.getQuaternionFromEuler(rpy), (.12, .16, .23, 1.)))
+            frustum = Marker()
+            frustum.header.frame_id = 'external_camera_optical_frame'
+            frustum.header.stamp = self.get_clock().now().to_msg()
+            frustum.ns, frustum.id = 'external_camera', 0
+            frustum.type, frustum.action = Marker.LINE_LIST, Marker.ADD
+            frustum.pose.orientation.w = 1.
+            frustum.scale.x = .002
+            frustum.color.r, frustum.color.g, frustum.color.b, frustum.color.a = (0., .75, 1., .8)
+            corners = [Point(x=x, y=y, z=.25) for x, y in
+                       [(-.185, -.139), (.185, -.139), (.185, .139), (-.185, .139)]]
+            for i, corner in enumerate(corners):
+                frustum.points.extend([Point(), corner, corner, corners[(i+1) % 4]])
+            message.markers.append(frustum)
         for mid, part, color, (xyz, quat) in self.world.part_poses():
             message.markers.append(self.marker(mid, part['shape'], part['size'], xyz, quat, color))
         self.markers.publish(message)
 
     def camera(self):
         stamp = self.get_clock().now().to_msg()
-        for sensor in ('color', 'depth'):
-            frame = f'd435_camera_{sensor}_optical_frame'
-            rgb, depth, focal = self.world.render(frame)
-            pixels = rgb if sensor == 'color' else depth
+        sensors = ['color', 'depth'] if self.get_parameter('camera_source').value == 'sim' else []
+        if self.external:
+            sensors += ['external', 'external_depth']
+        external_pixels = self.world.render_external() if self.external else None
+        for sensor in sensors:
+            if sensor.startswith('external'):
+                frame = 'external_camera_optical_frame'
+                rgb, depth, focal = external_pixels
+            else:
+                frame = f'd435_camera_{sensor}_optical_frame'
+                rgb, depth, focal = self.world.render(frame)
+            is_color = sensor in ('color', 'external')
+            pixels = rgb if is_color else depth
             msg = Image()
             msg.header.stamp, msg.header.frame_id = stamp, frame
             msg.height, msg.width = pixels.shape[:2]
-            msg.encoding = 'rgb8' if sensor == 'color' else '32FC1'
+            msg.encoding = 'rgb8' if is_color else '32FC1'
             msg.is_bigendian = 0
-            msg.step = msg.width * (3 if sensor == 'color' else 4)
+            msg.step = msg.width * (3 if is_color else 4)
             msg.data = pixels.tobytes()
             info = CameraInfo()
             info.header = msg.header

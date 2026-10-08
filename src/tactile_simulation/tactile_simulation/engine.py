@@ -11,12 +11,19 @@ from ament_index_python.packages import get_package_share_directory
 
 from .objects import KINDS, PALETTE, geometry, slot_position
 from .forces import jaw_contact_force
+from . import tabletop
 
 HOME = (0., -0.6, -0.8, 0., 1.4, 0., 0.)
 
 
 class World:
-    def __init__(self, description):
+    def __init__(self, description, scene='playground', robot_model='uf850'):
+        if scene not in ('playground', 'tabletop'):
+            raise ValueError('unknown scene')
+        self.scene_kind = scene
+        self.home = tabletop.HOMES[robot_model] if scene == 'tabletop' else HOME
+        self.table_height = tabletop.TABLE_HEIGHT if scene == 'tabletop' else .06
+        self.fixtures = []
         self.client = p.connect(p.DIRECT)
         p.setGravity(0, 0, -9.81, physicsClientId=self.client)
         p.setTimeStep(1/240, physicsClientId=self.client)
@@ -65,15 +72,23 @@ class World:
         self.objects = {}
         self.next_id = 1
         self.create_static_box((2., 2., 0.01), (0., 0., -0.005), (0.25,)*3 + (1.,))
-        self.create_static_box((0.64, 0.5, 0.02), (0.415, 0., 0.05), (0.55, 0.42, 0.28, 1.))
+        if scene == 'tabletop':
+            for size, xyz, color in tabletop.fixtures():
+                self.create_static_box(size, xyz, color)
+        else:
+            self.create_static_box((0.64, 0.5, 0.02), (0.415, 0., 0.05), (0.55, 0.42, 0.28, 1.))
         self.reset_arm()
+        if scene == 'tabletop':
+            self.reset_scene()
 
     def create_static_box(self, size, xyz, color):
         collision = p.createCollisionShape(p.GEOM_BOX, halfExtents=[v/2 for v in size],
                                            physicsClientId=self.client)
         visual = p.createVisualShape(p.GEOM_BOX, halfExtents=[v/2 for v in size],
                                     rgbaColor=color, physicsClientId=self.client)
-        return p.createMultiBody(0, collision, visual, xyz, physicsClientId=self.client)
+        body = p.createMultiBody(0, collision, visual, xyz, physicsClientId=self.client)
+        self.fixtures.append((size, xyz, color))
+        return body
 
     def positions_for_targets(self):
         positions = dict(self.targets)
@@ -82,7 +97,7 @@ class World:
         return positions
 
     def reset_arm(self):
-        self.targets = dict(zip(self.targets, HOME))
+        self.targets = dict(zip(self.targets, self.home))
         for name, value in self.positions_for_targets().items():
             p.resetJointState(self.robot, self.joints[name], value, physicsClientId=self.client)
 
@@ -145,6 +160,8 @@ class World:
                                    physicsClientId=self.client)
             reading = jaw_contact_force(contacts, self.robot,
                 {self.links[frame], self.links[f'ag95_{side}_finger']}, np.asarray(state[4]))
+            if reading['normal_load'] == 0.:
+                reading['point'] = np.asarray(state[4])
             rotation = np.asarray(p.getMatrixFromQuaternion(state[5])).reshape(3, 3)
             reading.update(frame=frame, local_force=rotation.T @ reading['force'],
                            local_torque=rotation.T @ reading['torque'])
@@ -156,6 +173,14 @@ class World:
             raise ValueError('choose a listed type and count between 1 and 48')
         used = {obj['slot'] for obj in self.objects.values()}
         available = [i for i in range(48) if i not in used]
+        if self.scene_kind == 'tabletop':
+            # Existing benchmark props occupy the central work area. Reject
+            # nearby positions rather than inserting bodies into one another.
+            occupied = [p.getBasePositionAndOrientation(obj['body'],
+                        physicsClientId=self.client)[0] for obj in self.objects.values()]
+            available = [i for i in available if all(
+                np.linalg.norm(np.asarray(slot_position(i)) - xyz[:2]) > .105
+                for xyz in occupied)]
         if count > len(available):
             raise ValueError(f'only {len(available)} free object slots remain; clear the scene first')
         rng = random.Random(seed)
@@ -163,34 +188,50 @@ class World:
         for n, slot in enumerate(slots):
             chosen = KINDS[n % len(KINDS)] if kind == 'mixed' else kind
             parts, height = geometry(chosen)
-            shape_types, half_extents, radii, lengths, positions, orientations = [], [], [], [], [], []
-            for component in parts:
-                shape_types.append({'box': p.GEOM_BOX, 'sphere': p.GEOM_SPHERE,
-                                    'cylinder': p.GEOM_CYLINDER}[component['shape']])
-                half_extents.append([v/2 for v in component['size']])
-                radii.append(component['size'][0]/2)
-                lengths.append(component['size'][2])
-                positions.append(component['xyz'])
-                orientations.append(p.getQuaternionFromEuler((0., 0., component['yaw'])))
-            collision = p.createCollisionShapeArray(
-                shapeTypes=shape_types, halfExtents=half_extents, radii=radii,
-                lengths=lengths, collisionFramePositions=positions,
-                collisionFrameOrientations=orientations, physicsClientId=self.client)
-            color = PALETTE[n % len(PALETTE)]
-            visual = p.createVisualShapeArray(
-                shapeTypes=shape_types, halfExtents=half_extents, radii=radii,
-                lengths=lengths, visualFramePositions=positions,
-                visualFrameOrientations=orientations, rgbaColors=[color]*len(parts),
-                physicsClientId=self.client)
             x, y = slot_position(slot)
-            body = p.createMultiBody(0.05, collision, visual, (x, y, 0.062 + height/2),
-                                     p.getQuaternionFromEuler((0., 0., rng.uniform(-math.pi, math.pi))),
-                                     physicsClientId=self.client)
-            p.changeDynamics(body, -1, lateralFriction=0.9, restitution=0.,
-                             physicsClientId=self.client)
-            self.objects[self.next_id] = dict(body=body, slot=slot, kind=chosen,
-                                              parts=parts, color=color)
-            self.next_id += 1
+            self.add_object(chosen, parts, height, (x, y), PALETTE[n % len(PALETTE)],
+                            slot=slot, yaw=rng.uniform(-math.pi, math.pi))
+
+    def add_object(self, kind, parts, height, xy, color, slot, yaw=0., mass=.05, name=''):
+        shape_types, half_extents, radii, lengths, positions, orientations = [], [], [], [], [], []
+        for component in parts:
+            shape_types.append({'box': p.GEOM_BOX, 'sphere': p.GEOM_SPHERE,
+                                'cylinder': p.GEOM_CYLINDER}[component['shape']])
+            half_extents.append([v/2 for v in component['size']])
+            radii.append(component['size'][0]/2)
+            lengths.append(component['size'][2])
+            positions.append(component['xyz'])
+            orientations.append(p.getQuaternionFromEuler((0., 0., component['yaw'])))
+        collision = p.createCollisionShapeArray(
+            shapeTypes=shape_types, halfExtents=half_extents, radii=radii,
+            lengths=lengths, collisionFramePositions=positions,
+            collisionFrameOrientations=orientations, physicsClientId=self.client)
+        visual = p.createVisualShapeArray(
+            shapeTypes=shape_types, halfExtents=half_extents, radii=radii,
+            lengths=lengths, visualFramePositions=positions,
+            visualFrameOrientations=orientations, rgbaColors=[color]*len(parts),
+            physicsClientId=self.client)
+        body = p.createMultiBody(mass, collision, visual,
+                                 (*xy, self.table_height + .002 + height/2),
+                                 p.getQuaternionFromEuler((0., 0., yaw)),
+                                 physicsClientId=self.client)
+        p.changeDynamics(body, -1, lateralFriction=.9, restitution=0.,
+                         physicsClientId=self.client)
+        self.objects[self.next_id] = dict(body=body, slot=slot, kind=kind,
+                                          parts=parts, color=color, name=name)
+        self.next_id += 1
+
+    def reset_scene(self):
+        self.clear()
+        if self.scene_kind == 'tabletop':
+            for n, (name, kind, scale, xy, color, mass) in enumerate(tabletop.props()):
+                parts, height = geometry(kind)
+                parts = [dict(part, size=tuple(v*scale for v in part['size']),
+                              xyz=tuple(v*scale for v in part['xyz'])) for part in parts]
+                # Negative slots distinguish preset props from catalogue slots;
+                # spawn() excludes nearby catalogue positions geometrically.
+                self.add_object(kind, parts, height*scale, xy, color, slot=n-5,
+                                mass=mass, name=name)
 
     def clear(self):
         for obj in self.objects.values():
@@ -212,7 +253,14 @@ class World:
         rotation = np.array(p.getMatrixFromQuaternion(quat)).reshape(3, 3)
         # ROS optical: X right, Y down, Z forward; OpenGL view uses Y up.
         view = p.computeViewMatrix(xyz, xyz + rotation[:, 2], -rotation[:, 1])
-        near, far, fov = 0.02, 3., 58.
+        return self.render_view(view, width, height)
+
+    def render_external(self, width=480, height=360):
+        view = p.computeViewMatrix(tabletop.EXTERNAL_EYE, tabletop.EXTERNAL_TARGET, [0., 0., 1.])
+        return self.render_view(view, width, height)
+
+    def render_view(self, view, width, height):
+        near, far, fov = 0.02, 4., 58.
         projection = p.computeProjectionMatrixFOV(fov, width/height, near, far)
         result = p.getCameraImage(width, height, view, projection,
                                   renderer=p.ER_TINY_RENDERER, physicsClientId=self.client)

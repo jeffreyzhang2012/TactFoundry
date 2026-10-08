@@ -1,6 +1,7 @@
 <?xml version="1.0"?>
 <robot name="tactile_arm_ag95" xmlns:xacro="http://ros.org/wiki/xacro">
   <xacro:arg name="robot_model" default="uf850"/>
+  <xacro:arg name="base_xyz" default="0 0 0"/>
   <xacro:arg name="mount_xyz" default="0 0 0"/>
   <xacro:arg name="mount_rpy" default="0 0 1.5707963267948966"/>
   <xacro:arg name="add_camera" default="true"/>
@@ -19,7 +20,7 @@
   <link name="world"/>
   <joint name="world_joint" type="fixed">
     <parent link="world"/><child link="link_base"/>
-    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <origin xyz="$(arg base_xyz)" rpy="0 0 0"/>
   </joint>
   <xacro:property name="selected_model" value="$(arg robot_model)"/>
   <xacro:if value="${selected_model == 'xarm6'}">

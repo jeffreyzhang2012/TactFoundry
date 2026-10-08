@@ -20,6 +20,7 @@ class Controls(QWidget):
         self.add_client = node.create_client(SpawnObjects, 'scene/spawn_objects')
         self.clear_client = node.create_client(Trigger, 'scene/clear_objects')
         self.reset_client = node.create_client(Trigger, 'scene/reset_arm')
+        self.layout_client = node.create_client(Trigger, 'scene/reset_layout')
         self.pending = None
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel('Object type'))
@@ -38,7 +39,8 @@ class Controls(QWidget):
         layout.addWidget(self.seed)
         self.buttons = []
         for label, action in [('Add objects', self.add), ('Clear objects', self.clear),
-                              ('New mixed scene', self.new_scene), ('Reset arm pose', self.reset)]:
+                              ('New mixed scene', self.new_scene),
+                              ('Restore original layout', self.restore_layout), ('Reset arm pose', self.reset)]:
             button = QPushButton(label)
             button.clicked.connect(action)
             layout.addWidget(button)
@@ -73,6 +75,9 @@ class Controls(QWidget):
 
     def reset(self):
         self.send(self.reset_client, Trigger.Request())
+
+    def restore_layout(self):
+        self.send(self.layout_client, Trigger.Request())
 
     def poll(self):
         rclpy.spin_once(self.node, timeout_sec=0)

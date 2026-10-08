@@ -11,6 +11,8 @@ def part(shape, size, xyz=(0., 0., 0.), yaw=0.):
 
 
 def geometry(kind):
+    if kind == 'plate':
+        return [part('cylinder', (.14, .14, .008))], .008
     if kind == 'cube':
         return [part('box', (0.035, 0.035, 0.035))], 0.035
     if kind == 'box':

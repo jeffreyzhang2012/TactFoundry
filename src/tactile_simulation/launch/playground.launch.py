@@ -9,12 +9,20 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 from tactile_simulation.camera_launch import real_camera
+from tactile_simulation.tabletop import HOMES
 
 
 def nodes(context):
     share = get_package_share_directory('tactile_robot_description')
     settings = {name: LaunchConfiguration(name).perform(context)
                 for name in ('robot_model', 'mount_xyz', 'mount_rpy', 'camera_mount_xyz', 'camera_mount_rpy')}
+    scene = LaunchConfiguration('scene').perform(context)
+    settings['base_xyz'] = '0 0 .75' if scene == 'tabletop' else '0 0 0'
+    joint_defaults = {}
+    if scene == 'tabletop':
+        joint_defaults = {'zeros.' + name: value for name, value in zip(
+            [f'joint{i}' for i in range(1, 7)] + ['ag95_left_outer_knuckle_joint'],
+            HOMES[settings['robot_model']])}
     description = xacro.process_file(os.path.join(share, 'urdf', 'xarm6_ag95.urdf.xacro'),
                                      mappings=settings).toxml()
     source = LaunchConfiguration('camera_source').perform(context)
@@ -23,11 +31,12 @@ def nodes(context):
              parameters=[{'robot_description': description}], output='screen'),
         Node(package='joint_state_publisher_gui', executable='joint_state_publisher_gui',
              parameters=[os.path.join(share, 'config', 'joints.yaml'),
-                         {'source_list': ['simulation/target_feedback']}],
+                         {'source_list': ['simulation/target_feedback']}, joint_defaults],
              remappings=[('joint_states', 'simulation/joint_commands')],
              condition=IfCondition(LaunchConfiguration('gui'))),
         Node(package='tactile_simulation', executable='playground', output='screen',
              parameters=[{'robot_description': description, 'camera_source': source,
+                          'scene': scene, 'robot_model': settings['robot_model'],
                           'object_kind': LaunchConfiguration('object_kind').perform(context),
                           'object_count': int(LaunchConfiguration('object_count').perform(context)),
                           'gamepad': LaunchConfiguration('gamepad').perform(context) == 'true',
@@ -37,7 +46,7 @@ def nodes(context):
         Node(package='tactile_simulation', executable='scene_controls',
              condition=IfCondition(LaunchConfiguration('gui'))),
         Node(package='rviz2', executable='rviz2',
-             arguments=['-d', os.path.join(share, 'rviz', 'xarm6_ag95.rviz')],
+             arguments=['-d', os.path.join(share, 'rviz', 'tabletop.rviz' if scene == 'tabletop' else 'xarm6_ag95.rviz')],
              condition=IfCondition(LaunchConfiguration('rviz'))),
     ]
     if LaunchConfiguration('gamepad').perform(context) == 'true':
@@ -51,6 +60,7 @@ def nodes(context):
 
 def generate_launch_description():
     return LaunchDescription([
+        DeclareLaunchArgument('scene', default_value='playground', choices=['playground', 'tabletop']),
         DeclareLaunchArgument('robot_model', default_value='uf850', choices=['uf850', 'xarm6']),
         DeclareLaunchArgument('domain_id', default_value='42',
                               description='Isolate simulation from hardware and display-only nodes'),

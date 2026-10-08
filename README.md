@@ -12,6 +12,54 @@ a trained controller for our 850 + AG95 setup.
 With the model server running, use `bash tools/pi05/live.sh` to watch fresh
 π0.5 episodes in RViz with live robot/object geometry and both camera views.
 
+## Demo-style tabletop for the 850 + AG95
+
+```bash
+cd ~/projects/TactFoundry
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+ros2 launch tactile_simulation tabletop.launch.py gamepad:=true
+# The same scene with separately solved xArm6 joint angles:
+# ros2 launch tactile_simulation tabletop.launch.py robot_model:=xarm6 gamepad:=true
+```
+
+This scene recreates the bowl-between-plate-and-ramekin layout with our robot,
+a wooden bench, rear cabinet, backdrop and two distractors. It uses procedural
+props rather than the original LIBERO assets. The robot base sits on the
+750 mm bench; both ROS TF and physics use that mounting height. The main props
+sit approximately 430 mm forward of the base. Each robot has its own home
+joint angles, placing the gripper flange at (390, 0, 1080) mm in world with
+the fingertips pointing down, while retaining the 90-degree AG95 mounting.
+The black bowl's outer diameter is approximately 70 mm, below the AG95's
+95 mm opening; the 140 mm plate is the placement target. These dimensions
+give room for the larger wrist/gripper assembly compared with the benchmark.
+
+RViz shows the 3D scene, wrist D435 color/depth, and a fixed external RGB view.
+The external camera is at (980, -950, 1550) mm, looking toward
+(270, 0, 1020) mm, with a 58-degree vertical field of view. A camera body and
+cyan frustum indicate its pose. It publishes 480x360 RGB and depth on
+`/camera/external/image_raw` and `/camera/external_depth/image_raw`, with
+matching `camera_info` topics and `external_camera_optical_frame` TF, at a
+target 10 Hz. Optical axes are X right, Y down, Z forward. The wrist streams
+retain their existing names and controller frame. `camera_source:=real`
+uses the real wrist D435 driver while the external view remains simulated;
+`camera_source:=none` disables wrist rendering only in this scene.
+
+Use **Restore original layout** to restore the five props, **Reset arm pose**
+to return to the robot-specific home, or add other object types as before.
+Additional objects avoid occupied preset positions; requests exceeding the
+remaining free slots are rejected. PS5 controls and jaw-force arrows remain
+available. With the wrist pointing down, left-stick forward/back moves
+toward/away from the table; use `stick_plane:=xy` for motion in the image plane.
+
+This prepares a matching environment for teleoperation and future training.
+The LIBERO π0.5 checkpoint still runs on its original benchmark robot. Its
+Franka setup has different kinematics, gripper geometry, camera viewpoints,
+and action/state conventions. Our six-joint arm and angular AG95 joint need
+their own observation/action transforms, recorded demonstrations and tuning.
+The home pose and props were checked in simulation; trajectories are not
+collision-planned, and real mount/camera calibration remains necessary.
+
 ## Simulated jaw force
 
 RViz's **Jaw force arrows** display shows solved contact reactions on each AG95

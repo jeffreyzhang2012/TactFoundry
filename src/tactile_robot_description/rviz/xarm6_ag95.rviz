@@ -14,7 +14,7 @@ Visualization Manager:
       Color: 95; 106; 122
       Reference Frame: world
     - Class: rviz_default_plugins/RobotModel
-      Name: xArm6 + AG-95
+      Name: Robot arm + AG-95
       Enabled: true
       Alpha: 1
       Visual Enabled: true

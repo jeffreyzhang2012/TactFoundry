@@ -14,7 +14,7 @@ def launch_nodes(context):
     description = xacro.process_file(
         os.path.join(share, 'urdf', 'xarm6_ag95.urdf.xacro'),
         mappings={name: LaunchConfiguration(name).perform(context)
-                  for name in ('mount_xyz', 'mount_rpy', 'add_camera',
+                  for name in ('robot_model', 'mount_xyz', 'mount_rpy', 'add_camera',
                                'camera_mount_xyz', 'camera_mount_rpy')},
     ).toxml()
     gui = LaunchConfiguration('gui').perform(context).lower() == 'true'
@@ -33,6 +33,7 @@ def launch_nodes(context):
 
 def generate_launch_description():
     return LaunchDescription([
+        DeclareLaunchArgument('robot_model', default_value='uf850', choices=['uf850', 'xarm6']),
         DeclareLaunchArgument('gui', default_value='true', choices=['true', 'false']),
         DeclareLaunchArgument('rviz', default_value='true', choices=['true', 'false']),
         DeclareLaunchArgument('mount_xyz', default_value='0 0 0',

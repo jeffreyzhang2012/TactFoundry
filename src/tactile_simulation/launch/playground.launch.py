@@ -14,7 +14,7 @@ from tactile_simulation.camera_launch import real_camera
 def nodes(context):
     share = get_package_share_directory('tactile_robot_description')
     settings = {name: LaunchConfiguration(name).perform(context)
-                for name in ('mount_xyz', 'mount_rpy', 'camera_mount_xyz', 'camera_mount_rpy')}
+                for name in ('robot_model', 'mount_xyz', 'mount_rpy', 'camera_mount_xyz', 'camera_mount_rpy')}
     description = xacro.process_file(os.path.join(share, 'urdf', 'xarm6_ag95.urdf.xacro'),
                                      mappings=settings).toxml()
     source = LaunchConfiguration('camera_source').perform(context)
@@ -50,6 +50,7 @@ def nodes(context):
 
 def generate_launch_description():
     return LaunchDescription([
+        DeclareLaunchArgument('robot_model', default_value='uf850', choices=['uf850', 'xarm6']),
         DeclareLaunchArgument('domain_id', default_value='42',
                               description='Isolate simulation from hardware and display-only nodes'),
         SetEnvironmentVariable('ROS_DOMAIN_ID', LaunchConfiguration('domain_id')),

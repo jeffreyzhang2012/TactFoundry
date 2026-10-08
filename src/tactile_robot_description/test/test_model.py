@@ -2,6 +2,7 @@ from pathlib import Path
 import xml.etree.ElementTree as ET
 
 import xacro
+import pytest
 from ament_index_python.packages import get_package_share_directory
 
 
@@ -10,8 +11,11 @@ def model(**mappings):
     return ET.fromstring(xacro.process_file(str(source), mappings=mappings).toxml())
 
 
-def test_connected_model_and_meshes():
-    robot = model()
+@pytest.mark.parametrize('robot_model', ['uf850', 'xarm6'])
+def test_connected_model_and_meshes(robot_model):
+    robot = model(robot_model=robot_model)
+    assert any(f'/meshes/{robot_model}/' in mesh.attrib['filename']
+               for mesh in robot.findall('.//mesh'))
     links = {link.attrib['name'] for link in robot.findall('link')}
     joints = robot.findall('joint')
     children = {joint.find('child').attrib['link'] for joint in joints}
@@ -40,6 +44,13 @@ def test_connected_model_and_meshes():
         assert uri.startswith('package://')
         package, relative = uri[len('package://'):].split('/', 1)
         assert (Path(get_package_share_directory(package)) / relative).is_file()
+
+
+def test_default_is_uf850():
+    robot = model()
+    assert robot.find("joint[@name='joint1']/origin").attrib['xyz'] == '0 0 0.364'
+    assert robot.find("joint[@name='joint3']/limit").attrib['upper'] == '0.061087'
+    assert '/uf850/' in robot.find("link[@name='link_base']/visual/geometry/mesh").attrib['filename']
 
 
 def test_adjustable_mount():

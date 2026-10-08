@@ -1,5 +1,6 @@
 <?xml version="1.0"?>
-<robot name="xarm6_ag95" xmlns:xacro="http://ros.org/wiki/xacro">
+<robot name="tactile_arm_ag95" xmlns:xacro="http://ros.org/wiki/xacro">
+  <xacro:arg name="robot_model" default="uf850"/>
   <xacro:arg name="mount_xyz" default="0 0 0"/>
   <xacro:arg name="mount_rpy" default="0 0 1.5707963267948966"/>
   <xacro:arg name="add_camera" default="true"/>
@@ -11,6 +12,7 @@
   <xacro:include filename="$(find xarm_description)/urdf/common/common.material.xacro"/>
   <xacro:include filename="$(find xarm_description)/urdf/common/common.link.xacro"/>
   <xacro:include filename="$(find xarm_description)/urdf/xarm6/xarm6.urdf.xacro"/>
+  <xacro:include filename="$(find xarm_description)/urdf/uf850/uf850.urdf.xacro"/>
   <xacro:include filename="$(find dh_ag95_description)/urdf/dh_ag95_macro.xacro"/>
   <xacro:include filename="$(find xarm_description)/urdf/camera/realsense_d435i.urdf.xacro"/>
   <xacro:common_material prefix=""/>
@@ -19,8 +21,15 @@
     <parent link="world"/><child link="link_base"/>
     <origin xyz="0 0 0" rpy="0 0 0"/>
   </joint>
-  <xacro:xarm6_urdf prefix=""
-    kinematics_params_filename="$(find xarm_description)/config/kinematics/default/xarm6_default_kinematics.yaml"/>
+  <xacro:property name="selected_model" value="$(arg robot_model)"/>
+  <xacro:if value="${selected_model == 'xarm6'}">
+    <xacro:xarm6_urdf prefix=""
+      kinematics_params_filename="$(find xarm_description)/config/kinematics/default/xarm6_default_kinematics.yaml"/>
+  </xacro:if>
+  <xacro:if value="${selected_model == 'uf850'}">
+    <xacro:uf850_urdf prefix=""
+      kinematics_params_filename="$(find xarm_description)/config/kinematics/default/uf850_default_kinematics.yaml"/>
+  </xacro:if>
   <!-- UFACTORY's nominal tool frame coincides with link6. -->
   <link name="link_eef"/>
   <joint name="joint_eef" type="fixed">

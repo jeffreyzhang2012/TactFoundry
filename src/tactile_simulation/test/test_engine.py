@@ -10,10 +10,10 @@ from tactile_simulation.engine import World
 from tactile_simulation.objects import KINDS
 
 
-@pytest.fixture
-def world():
+@pytest.fixture(params=['uf850', 'xarm6'])
+def world(request):
     model = Path(get_package_share_directory('tactile_robot_description')) / 'urdf/xarm6_ag95.urdf.xacro'
-    instance = World(xacro.process_file(str(model)).toxml())
+    instance = World(xacro.process_file(str(model), mappings={'robot_model': request.param}).toxml())
     yield instance
     instance.close()
 

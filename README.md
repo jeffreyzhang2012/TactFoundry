@@ -2,6 +2,27 @@
 
 ROS 2 tactile sensing workspace for NVIDIA Jetson Orin and real hardware.
 
+## Choose the arm
+
+The default arm is **UFACTORY 850** (`uf850`). Select either arm at launch with
+`robot_model:=uf850` or `robot_model:=xarm6`. Both use the AG95 gripper rotated
+90 degrees, the wrist D435 kit, simulated camera/objects, and PS5 controls.
+
+```bash
+# Default: UFACTORY 850
+ros2 launch tactile_simulation playground.launch.py gamepad:=true
+# xArm6
+ros2 launch tactile_simulation playground.launch.py robot_model:=xarm6 gamepad:=true
+# RViz model display or real-camera view also accept the selector
+ros2 launch tactile_robot_description display.launch.py robot_model:=uf850
+ros2 launch tactile_simulation camera_view.launch.py robot_model:=xarm6
+```
+
+Restart the launch to change arms. The filename `xarm6_ag95.urdf.xacro` is retained
+for compatibility; its `robot_model` argument now defaults to `uf850`. Arm models
+come from the pinned official UFACTORY descriptions. Camera and gripper mount
+offsets remain nominal and need verification on the physical 850 assembly.
+
 ## Camera and grasping playground
 
 The WSL playground provides a CPU-rendered wrist camera, a low tabletop,

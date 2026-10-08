@@ -2,6 +2,13 @@
 
 ROS 2 tactile sensing workspace for NVIDIA Jetson Orin and real hardware.
 
+## π0.5 VLA demo
+
+Run the official π0.5-LIBERO manipulation demo using the workstation GPU:
+see [setup, run commands, and 850 fine-tuning plan](tools/pi05/README.md).
+This uses the matching LIBERO benchmark robot; the public checkpoint is not
+a trained controller for our 850 + AG95 setup.
+
 ## Simulated jaw force
 
 RViz's **Jaw force arrows** display shows solved contact reactions on each AG95

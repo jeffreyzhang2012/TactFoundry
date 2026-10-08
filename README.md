@@ -251,8 +251,8 @@ Connect a DualSense controller to Ubuntu, then launch:
 ros2 launch tactile_simulation playground.launch.py gamepad:=true
 ```
 
-Hold **L1** while moving. Left stick left/right moves along world X;
-left stick forward/back moves along world Y (forward is positive Y). D-pad
+Hold **L1** while moving. Left stick left/right moves along world Y;
+left stick forward/back moves along world X (forward is positive X). D-pad
 up/down moves along world Z (height). Right stick up/down controls pitch,
 left/right controls yaw; R2 rolls positive and L2 rolls negative. These rotation
 rates use fixed world axes. Cross closes the gripper; Circle opens it.

@@ -26,7 +26,7 @@ class Gamepad:
         a = [0. if abs(v) < .08 else v for v in self.axes]
         b = self.buttons
         other = float(b[11] - b[12])  # D-pad up/down
-        linear = [other, a[0], a[1]] if self.plane == 'yz' else [a[0], a[1], other]
+        linear = [other, a[0], a[1]] if self.plane == 'yz' else [a[1], a[0], other]
         # ROS joy's SDL axes are inverted: triggers rest at 0, pressed at -1.
         angular = [max(0., -a[5]) - max(0., -a[4]), a[3], a[2]]
         return [v * .35 for v in linear] + [v * .4 for v in angular], float(b[0] - b[1]) * .5

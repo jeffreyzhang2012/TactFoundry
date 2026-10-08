@@ -251,12 +251,13 @@ Connect a DualSense controller to Ubuntu, then launch:
 ros2 launch tactile_simulation playground.launch.py gamepad:=true
 ```
 
-Hold **L1** while moving. Controls follow the moving D435 color camera frame.
+Hold **Cross (×)** while moving the arm. Controls follow the moving D435 color camera frame.
 Left stick left/right moves left/right in the camera view; forward/back moves
 along the camera viewing direction. D-pad up/down moves up/down in the view.
 Right stick up/down controls pitch,
 left/right controls yaw; R2 rolls positive and L2 rolls negative. These rotation
-rates also follow the camera axes. Cross closes the gripper; Circle opens it.
+rates also follow the camera axes. L1 opens the gripper; R1 closes it, without
+needing Cross. Both shoulders together hold the gripper position.
 The optical frame uses X right, Y down, Z forward, so this is the default
 `stick_plane:=xz` mapping. `stick_plane:=xy` moves the stick in the image plane
 and uses the D-pad for depth. Select another controller with `device_id:=1`.
@@ -264,8 +265,13 @@ and uses the D-pad for depth. Select another controller with `device_id:=1`.
 Controller mode disables slider commands so they cannot fight the gamepad; sliders
 show commanded positions. Motion uses damped differential inverse kinematics at a
 nominal gripper center 150 mm from its base, with joint limits, a 0.5 rad/s joint
-speed cap, 0.35 m/s translation and 0.4 rad/s rotation. Releasing L1 or receiving
-no valid input for 250 ms holds the current target. Reset clears pending input.
+speed cap, 0.5 m/s translation and 0.4 rad/s rotation. Releasing Cross holds the
+arm target; releasing the shoulder buttons holds the gripper. No valid input
+for 250 ms holds both. Reset clears pending input.
+Combined translation and rotation share the joint-speed cap: if any joint
+exceeds 0.5 rad/s, all requested joint rates are scaled together, slowing both
+motions while preserving their requested proportion. Near singular poses,
+damped inverse kinematics further reduces achievable motion.
 This controls the physics playground; a real-arm Cartesian driver is not connected.
 
 On Windows/WSL, attach the USB controller to WSL using USB/IP (Bluetooth pairing

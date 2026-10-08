@@ -17,11 +17,16 @@ import pybullet as p
 import rclpy
 import xacro
 import yaml
-from PIL import Image
+from PIL import Image, ImageDraw
 from ament_index_python.packages import get_package_share_directory
 from openpi_client import websocket_client_policy
 from tactile_simulation.node import Playground
-from generate import JOINTS, PROMPT, joint_state, bowl_contact
+from generate import JOINTS, PROMPT, joint_state
+from success import PlacementEvaluator
+
+TASKS = {'black_bowl': PROMPT,
+         'bottle': 'pick up the green bottle and place it upright on the plate',
+         'distractor_block': 'pick up the red block and place it on the plate'}
 
 
 def main():
@@ -29,6 +34,8 @@ def main():
     parser.add_argument('--port',type=int,default=8001)
     parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--seed',type=int,default=101)
+    parser.add_argument('--object',choices=TASKS,default='black_bowl')
+    parser.add_argument('--ros-domain-id',type=int,default=44)
     parser.add_argument('--episodes',type=int,default=3)
     parser.add_argument('--max-steps',type=int,default=480)
     parser.add_argument('--execute-steps',type=int,default=4,choices=range(1,11),
@@ -36,6 +43,8 @@ def main():
     parser.add_argument('--headless',action='store_true')
     parser.add_argument('--hold',action='store_true',help='Keep the final simulated scene live until Ctrl+C')
     args=parser.parse_args()
+    if args.episodes < 1 or args.max_steps < 1:
+        parser.error('episodes and max-steps must be positive')
     ffmpeg=shutil.which('ffmpeg')
     if ffmpeg is None:
         candidates=list((Path.home()/'projects/openpi/.venv/lib').glob(
@@ -43,7 +52,7 @@ def main():
         if not candidates: raise FileNotFoundError('Install ffmpeg or imageio-ffmpeg in OpenPI')
         ffmpeg=str(candidates[0])
     args.output.mkdir(parents=True,exist_ok=True)
-    os.environ['ROS_DOMAIN_ID']='44'
+    os.environ['ROS_DOMAIN_ID']=str(args.ros_domain_id)
     os.environ['FASTRTPS_DEFAULT_PROFILES_FILE']=str(Path(get_package_share_directory('tactile_simulation'))/'config/fastdds_udp.xml')
     client=websocket_client_policy.WebsocketClientPolicy('127.0.0.1',args.port)
     metadata=client.get_server_metadata()
@@ -73,24 +82,30 @@ def main():
             for seed in range(args.seed,args.seed+args.episodes):
                 world.reset_arm(); world.reset_scene(); client.reset()
                 props={obj['name']:obj for obj in world.objects.values()}
-                bowl,plate=props['black_bowl']['body'],props['target_plate']['body']
+                bowl,plate=props[args.object]['body'],props['target_plate']['body']
                 rng=np.random.default_rng(seed)
                 offset=rng.uniform([-.015,-.015],[.015,.015])
                 xyz,quat=p.getBasePositionAndOrientation(bowl,physicsClientId=world.client)
                 p.resetBasePositionAndOrientation(bowl,(xyz[0]+offset[0],xyz[1]+offset[1],xyz[2]),quat,physicsClientId=world.client)
                 for _ in range(30): world.step()
+                evaluator=PlacementEvaluator(world,bowl,plate)
                 node.physics(); node.camera(); node.scene()
-                lifted=False; bilateral=False; success=False; clipped=0; max_height=0.
+                initial_objects={name:p.getBasePositionAndOrientation(obj['body'],physicsClientId=world.client)[0]
+                                 for name,obj in props.items()}
+                success=False; clipped=0
                 frames_dir=scratch/f'frames_{seed}'
                 frames_dir.mkdir()
                 trace=[]
+                object_trace=[]
                 for step in range(args.max_steps):
                     rgb,_,_=world.render_external(224,224)
                     wrist,_,_=world.render('d435_camera_color_optical_frame',224,224)
-                    Image.fromarray(np.concatenate((rgb,wrist),axis=1)).save(frames_dir/f'{step:06d}.png')
+                    frame=Image.fromarray(np.concatenate((rgb,wrist),axis=1))
+                    ImageDraw.Draw(frame).text((4,4),f'{args.object} | step {step}',fill='white',stroke_width=1,stroke_fill='black')
+                    frame.save(frames_dir/f'{step:06d}.png')
                     if step%args.execute_steps==0:
                         prediction=np.asarray(client.infer({'observation/state':joint_state(world),
-                            'observation/image':rgb,'observation/wrist_image':wrist,'prompt':PROMPT})['actions'])
+                            'observation/image':rgb,'observation/wrist_image':wrist,'prompt':TASKS[args.object]})['actions'])
                         if prediction.shape!=(10,7) or not np.isfinite(prediction).all():
                             raise ValueError('Invalid action chunk from policy')
                     target=prediction[step%args.execute_steps]
@@ -109,29 +124,43 @@ def main():
                     world.command(JOINTS,rate_limited)
                     for _ in range(2): world.step()
                     node.physics(); node.camera(); node.scene()
-                    position,quat=p.getBasePositionAndOrientation(bowl,physicsClientId=world.client)
-                    target_pos=p.getBasePositionAndOrientation(plate,physicsClientId=world.client)[0]
-                    max_height=max(max_height,position[2]); lifted|=position[2]>.82
-                    bilateral|=bowl_contact(world,bowl)
-                    upright=np.asarray(p.getMatrixFromQuaternion(quat)).reshape(3,3)[2,2]>.8
-                    near_plate=np.linalg.norm(np.asarray(position[:2])-target_pos[:2])<.025
-                    released=world.targets[JOINTS[-1]]<.1
-                    success=bool(lifted and bilateral and near_plate and .765<position[2]<.79 and upright and released)
+                    checks,position,distance=evaluator.observe()
+                    object_trace.append([*position,distance,int(evaluator.bilateral),int(evaluator.grasped_and_lifted)])
+                    success=all(checks.values())
                     if success: break
                     if not args.headless: time.sleep(.05)
-                for _ in range(120): world.step()
+                stable=0
+                for settle in range(40):
+                    for _ in range(3): world.step()
+                    checks,position,distance=evaluator.observe()
+                    stable=stable+1 if all(checks.values()) else 0
+                    rgb,_,_=world.render_external(224,224)
+                    wrist,_,_=world.render('d435_camera_color_optical_frame',224,224)
+                    frame=Image.fromarray(np.concatenate((rgb,wrist),axis=1))
+                    ImageDraw.Draw(frame).text((4,4),f'{args.object} | settling',fill='white',stroke_width=1,stroke_fill='black')
+                    frame.save(frames_dir/f'{step+1+settle:06d}.png')
                 final=p.getBasePositionAndOrientation(bowl,physicsClientId=world.client)[0]
                 # Require the placement to survive settling after the last action.
-                success=bool(success and np.linalg.norm(np.asarray(final[:2])-target_pos[:2])<.025 and .765<final[2]<.79)
+                success=bool(stable>=20)  # at least one continuous second after release
                 subprocess.run([ffmpeg,'-loglevel','error','-framerate','20','-i',str(frames_dir/'%06d.png'),
                     '-c:v','libx264','-pix_fmt','yuv420p',str(args.output/f'rollout_{seed}.mp4')],check=True)
-                result=dict(seed=seed,success=success,lifted=bool(lifted),bilateral_contact=bool(bilateral),
-                            steps=step+1,rate_limited_steps=clipped,max_bowl_height=max_height,
-                            final_bowl_position=final,policy_metadata=metadata)
+                result=dict(seed=seed,object=args.object,prompt=TASKS[args.object],success=success,
+                            lifted=bool(evaluator.lifted),bilateral_contact=bool(evaluator.bilateral),
+                            steps=step+1,rate_limited_steps=clipped,max_object_height=evaluator.max_height,
+                            final_object_position=final,policy_metadata=metadata)
                 result['rate_limit_reference']='previous_command'
                 result['execute_steps']=args.execute_steps
+                result['final_checks']=checks
+                result['distance_to_plate_m']=distance
+                result['stable_placement_seconds']=stable*.05
+                result['failure_reasons']=[key for key,value in checks.items() if not value]
+                result['initial_object_positions']=initial_objects
+                result['final_object_positions']={name:p.getBasePositionAndOrientation(obj['body'],physicsClientId=world.client)[0]
+                                                 for name,obj in props.items()}
+                result['success_rule']='target-specific bilateral grasp during >=4cm lift; upright plate contact within 25mm; released, robot clear, stationary for >=1s'
                 results.append(result); print(json.dumps(result),flush=True)
-                np.savez_compressed(args.output/f'trace_{seed}.npz',joints_and_targets=np.asarray(trace))
+                np.savez_compressed(args.output/f'trace_{seed}.npz',joints_and_targets=np.asarray(trace),
+                                    object_xyz_distance_bilateral_graspedlifted=np.asarray(object_trace))
                 (args.output/'results.json').write_text(json.dumps(results,indent=2))
             while args.hold:
                 for _ in range(2): world.step()

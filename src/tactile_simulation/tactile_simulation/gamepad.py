@@ -24,9 +24,6 @@ class Gamepad:
         if now - self.received > 0.25:
             return [0.] * 6, 0.
         grip = float(self.buttons[10] - self.buttons[9]) * .5
-        # Shoulders independently jog the gripper; Cross enables arm motion.
-        if not self.buttons[0]:
-            return [0.] * 6, grip
         a = [0. if abs(v) < .08 else v for v in self.axes]
         b = self.buttons
         other = float(b[11] - b[12])  # D-pad up/down

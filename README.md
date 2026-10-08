@@ -251,13 +251,14 @@ Connect a DualSense controller to Ubuntu, then launch:
 ros2 launch tactile_simulation playground.launch.py gamepad:=true
 ```
 
-Hold **Cross (×)** while moving the arm. Controls follow the moving D435 color camera frame.
+The sticks move the arm directly; no enable button is required.
+Controls follow the moving D435 color camera frame.
 Left stick left/right moves left/right in the camera view; forward/back moves
 along the camera viewing direction. D-pad up/down moves up/down in the view.
 Right stick up/down controls pitch,
 left/right controls yaw; R2 rolls positive and L2 rolls negative. These rotation
-rates also follow the camera axes. L1 opens the gripper; R1 closes it, without
-needing Cross. Both shoulders together hold the gripper position.
+rates also follow the camera axes. L1 opens the gripper; R1 closes it.
+Both shoulders together hold the gripper position.
 The optical frame uses X right, Y down, Z forward, so this is the default
 `stick_plane:=xz` mapping. `stick_plane:=xy` moves the stick in the image plane
 and uses the D-pad for depth. Select another controller with `device_id:=1`.
@@ -265,8 +266,8 @@ and uses the D-pad for depth. Select another controller with `device_id:=1`.
 Controller mode disables slider commands so they cannot fight the gamepad; sliders
 show commanded positions. Motion uses damped differential inverse kinematics at a
 nominal gripper center 150 mm from its base, with joint limits, a 0.5 rad/s joint
-speed cap, 0.5 m/s translation and 0.4 rad/s rotation. Releasing Cross holds the
-arm target; releasing the shoulder buttons holds the gripper. No valid input
+speed cap, 0.5 m/s translation and 0.4 rad/s rotation. Centering the sticks and
+releasing the D-pad/triggers holds the arm; releasing the shoulders holds the gripper. No valid input
 for 250 ms holds both. Reset clears pending input.
 Combined translation and rotation share the joint-speed cap: if any joint
 exceeds 0.5 rad/s, all requested joint rates are scaled together, slowing both

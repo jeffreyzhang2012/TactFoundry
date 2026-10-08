@@ -4,11 +4,14 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile, DurabilityPolicy, qos_profile_sensor_data
 from sensor_msgs.msg import CameraInfo, Image, JointState, Joy
 from std_srvs.srv import Trigger
+from std_msgs.msg import Float32
+from geometry_msgs.msg import WrenchStamped
 from tactile_interfaces.srv import SpawnObjects
 from visualization_msgs.msg import Marker, MarkerArray
 
 from .engine import World
 from .gamepad import Gamepad
+from .force_markers import force_markers
 
 
 class Playground(Node):
@@ -16,7 +19,7 @@ class Playground(Node):
         super().__init__('tactile_playground')
         for name, value in [('robot_description', ''), ('camera_source', 'sim'),
                             ('object_kind', 'mixed'), ('object_count', 8), ('seed', 42),
-                            ('gamepad', False), ('stick_plane', 'xz')]:
+                            ('gamepad', False), ('stick_plane', 'xz'), ('force_arrow_scale', .01)]:
             self.declare_parameter(name, value)
         self.world = World(self.get_parameter('robot_description').value)
         count = self.get_parameter('object_count').value
@@ -31,6 +34,11 @@ class Playground(Node):
             self.create_subscription(Joy, 'joy', self.joy, qos_profile_sensor_data)
         self.markers = self.create_publisher(MarkerArray, 'scene/objects',
                         QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
+        self.force_arrows = self.create_publisher(MarkerArray, 'simulation/jaw_force_markers', 10)
+        self.wrenches = {side: self.create_publisher(WrenchStamped,
+            f'simulation/jaw_forces/{side}', 10) for side in ('left', 'right')}
+        self.normal_loads = {side: self.create_publisher(Float32,
+            f'simulation/jaw_forces/{side}/normal_load', 10) for side in ('left', 'right')}
         self.images, self.infos = {}, {}
         for sensor in ('color', 'depth'):
             self.images[sensor] = self.create_publisher(Image, f'camera/{sensor}/image_raw',
@@ -67,6 +75,19 @@ class Playground(Node):
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.name, msg.position = self.world.joint_states()
         self.states.publish(msg)
+        self.publish_forces(msg.header.stamp)
+
+    def publish_forces(self, stamp):
+        readings = self.world.jaw_forces()
+        for side, reading in readings.items():
+            msg = WrenchStamped()
+            msg.header.frame_id, msg.header.stamp = reading['frame'], stamp
+            msg.wrench.force.x, msg.wrench.force.y, msg.wrench.force.z = map(float, reading['local_force'])
+            msg.wrench.torque.x, msg.wrench.torque.y, msg.wrench.torque.z = map(float, reading['local_torque'])
+            self.wrenches[side].publish(msg)
+            self.normal_loads[side].publish(Float32(data=reading['normal_load']))
+        self.force_arrows.publish(force_markers(readings, stamp,
+            self.get_parameter('force_arrow_scale').value))
 
     def spawn(self, req, res):
         try:

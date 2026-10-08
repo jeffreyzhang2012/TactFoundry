@@ -8,6 +8,8 @@
   <exec_depend>tactile_robot_description</exec_depend>
   <exec_depend>tactile_interfaces</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
   <exec_depend>joy</exec_depend>
   <exec_depend>visualization_msgs</exec_depend>
   <exec_depend>std_srvs</exec_depend>

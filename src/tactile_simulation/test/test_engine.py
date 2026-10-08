@@ -101,3 +101,21 @@ def test_camera_relative_motion_follows_wrist_orientation(world):
                            computeForwardKinematics=True, physicsClientId=world.client)
     end = np.asarray(p.multiplyTransforms(state[4], state[5], [0., 0., .15], [0., 0., 0., 1.])[0])
     assert np.dot(end - start, forward) > .01
+
+
+def test_jaw_sensor_detects_physical_contact_and_release(world):
+    for reading in world.jaw_forces().values():
+        assert reading['normal_load'] == 0.
+    link = world.links['ag95_left_finger_pad']
+    low, high = p.getAABB(world.robot, link, physicsClientId=world.client)
+    center = (np.asarray(low) + np.asarray(high)) / 2
+    shape = p.createCollisionShape(p.GEOM_SPHERE, radius=.012, physicsClientId=world.client)
+    obstacle = p.createMultiBody(0., shape, -1, center, physicsClientId=world.client)
+    world.step()
+    reading = world.jaw_forces()['left']
+    assert reading['normal_load'] > 0.
+    assert np.linalg.norm(reading['force']) > 0.
+    assert np.isfinite(reading['local_torque']).all()
+    p.removeBody(obstacle, physicsClientId=world.client)
+    world.step()
+    assert world.jaw_forces()['left']['normal_load'] == 0.

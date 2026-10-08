@@ -10,6 +10,7 @@ import pybullet as p
 from ament_index_python.packages import get_package_share_directory
 
 from .objects import KINDS, PALETTE, geometry, slot_position
+from .forces import jaw_contact_force
 
 HOME = (0., -0.6, -0.8, 0., 1.4, 0., 0.)
 
@@ -134,6 +135,21 @@ class World:
         values = p.getJointStates(self.robot, list(self.joints.values()),
                                   physicsClientId=self.client)
         return names, [state[0] for state in values]
+
+    def jaw_forces(self):
+        contacts = p.getContactPoints(physicsClientId=self.client)
+        readings = {}
+        for side in ('left', 'right'):
+            frame = f'ag95_{side}_finger_pad'
+            state = p.getLinkState(self.robot, self.links[frame], computeForwardKinematics=True,
+                                   physicsClientId=self.client)
+            reading = jaw_contact_force(contacts, self.robot,
+                {self.links[frame], self.links[f'ag95_{side}_finger']}, np.asarray(state[4]))
+            rotation = np.asarray(p.getMatrixFromQuaternion(state[5])).reshape(3, 3)
+            reading.update(frame=frame, local_force=rotation.T @ reading['force'],
+                           local_torque=rotation.T @ reading['torque'])
+            readings[side] = reading
+        return readings
 
     def spawn(self, kind, count, seed):
         if kind not in (*KINDS, 'mixed') or not 1 <= count <= 48:

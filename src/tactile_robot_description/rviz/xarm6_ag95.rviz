@@ -35,6 +35,15 @@ Visualization Manager:
         Durability Policy: Transient Local
         History Policy: Keep Last
         Depth: 1
+    - Class: rviz_default_plugins/MarkerArray
+      Name: Jaw force arrows
+      Enabled: true
+      Topic:
+        Value: /simulation/jaw_force_markers
+        Reliability Policy: Reliable
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Depth: 1
     - Class: rviz_default_plugins/Image
       Name: D435 color view
       Enabled: true

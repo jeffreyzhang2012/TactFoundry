@@ -2,6 +2,26 @@
 
 ROS 2 tactile sensing workspace for NVIDIA Jetson Orin and real hardware.
 
+## Simulated jaw force
+
+RViz's **Jaw force arrows** display shows solved contact reactions on each AG95
+jaw: cyan for left, orange for right, with force labels in newtons. Arrows point
+in the direction of the external force acting on the jaw, start at the
+normal-force-weighted contact position, and disappear when contact ends. Closing
+the gripper in free space reads zero; touch or squeeze an object to see force.
+
+The readings sum normal and friction reactions on each finger and finger pad,
+excluding robot self-contact. `/simulation/jaw_forces/left` and `/right` publish
+`geometry_msgs/WrenchStamped` in the corresponding finger-pad frame, with torque
+about that frame's origin. The `/normal_load` subtopics publish the summed normal
+contact force in newtons. `/simulation/jaw_force_markers` publishes the arrows.
+The drawing defaults to 1 cm/N and caps arrow length at 25 cm without capping
+the sensor value. Set `force_arrow_scale:=0.02` for larger arrows.
+
+These are rigid-body physics estimates, not calibrated AG95 sensor measurements
+or a deformable tactile pad model. Force values depend on the contact solver,
+motor effort, friction and geometry; no synthetic force is added in free space.
+
 ## Choose the arm
 
 The default arm is **UFACTORY 850** (`uf850`). Select either arm at launch with
@@ -105,7 +125,8 @@ camera pose then does not follow the simulated robot.
 - **PyBullet**: included here for fast WSL prototypes, contact experiments,
   and CPU camera rendering. The AG-95's mimic joints use individual simulated
   motors; the physical closed-loop linkage, calibrated actuators, self-collision
-  checks, tactile deformation, and force sensing are not implemented.
+  checks, tactile deformation, and calibrated hardware force sensors are not implemented.
+  Jaw contact reactions are available as simulated force readings and RViz arrows.
 - **Gazebo Fortress**: the official pairing for the project's ROS 2 Humble /
   Ubuntu 22.04 stack, suitable for a future ros2_control/MoveIt integration.
   For a new Ubuntu 24.04 / ROS 2 Jazzy project, use Gazebo Harmonic instead.

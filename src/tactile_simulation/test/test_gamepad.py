@@ -1,0 +1,30 @@
+import numpy as np
+from tactile_simulation.gamepad import Gamepad
+
+
+def test_mapping_release_timeout_and_invalid_packets():
+    pad = Gamepad()
+    buttons = [0] * 15
+    buttons[9] = 1
+    pad.update([1., 1., 1., 1., 0., -1.], buttons, 1.)
+    twist, _ = pad.command(1.1)
+    assert twist == [0., .06, .06, .4, .4, .4]
+    assert not any(pad.command(1.3)[0])
+    buttons[9] = 0
+    pad.update([1.] * 6, buttons, 2.)
+    assert not any(pad.command(2.)[0])
+    buttons[9] = 1
+    pad.update([float('nan')] * 6, buttons, 3.)
+    assert not any(pad.command(3.)[0])
+    pad.update([], [], 4.)
+    assert not any(pad.command(4.)[0])
+
+
+def test_horizontal_mode_and_gripper():
+    pad = Gamepad('xy')
+    buttons = [0] * 15
+    buttons[9] = buttons[11] = buttons[0] = 1
+    pad.update([.5, 1., 0., 0., 0., 0.], buttons, 0.)
+    twist, grip = pad.command(0.)
+    assert np.allclose(twist, [.06, .03, .06, 0., 0., 0.])
+    assert grip == .5

@@ -56,3 +56,22 @@ def test_invalid_requests_do_not_mutate_scene(world):
     world.command(['joint1', 'joint2', 'bogus'], [100., float('nan'), 0.])
     assert world.targets['joint1'] == world.limits['joint1'][1]
     assert world.targets['joint2'] == -0.6
+
+
+def test_cartesian_ik_moves_tool_and_respects_joint_limits(world):
+    def pose():
+        return np.array(p.getLinkState(world.robot, world.links['ag95_ag95_base_link'],
+                       computeForwardKinematics=True, physicsClientId=world.client)[4])
+    before = pose()
+    for _ in range(120):
+        world.cartesian_command([0., .025, 0., 0., 0., 0.], 0., 1/60)
+        world.step()
+    change = pose() - before
+    assert change[1] > .015
+    assert abs(change[0]) < .015 and abs(change[2]) < .015
+    for _ in range(60):
+        world.cartesian_command([0., 0., 0., .2, .2, .2], .5, 1/60)
+        world.step()
+    for name, value in world.targets.items():
+        lower, upper, _ = world.limits[name]
+        assert lower <= value <= upper

@@ -1,19 +1,22 @@
+import time
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, DurabilityPolicy, qos_profile_sensor_data
-from sensor_msgs.msg import CameraInfo, Image, JointState
+from sensor_msgs.msg import CameraInfo, Image, JointState, Joy
 from std_srvs.srv import Trigger
 from tactile_interfaces.srv import SpawnObjects
 from visualization_msgs.msg import Marker, MarkerArray
 
 from .engine import World
+from .gamepad import Gamepad
 
 
 class Playground(Node):
     def __init__(self):
         super().__init__('tactile_playground')
         for name, value in [('robot_description', ''), ('camera_source', 'sim'),
-                            ('object_kind', 'mixed'), ('object_count', 8), ('seed', 42)]:
+                            ('object_kind', 'mixed'), ('object_count', 8), ('seed', 42),
+                            ('gamepad', False), ('stick_plane', 'yz')]:
             self.declare_parameter(name, value)
         self.world = World(self.get_parameter('robot_description').value)
         count = self.get_parameter('object_count').value
@@ -23,6 +26,9 @@ class Playground(Node):
         self.states = self.create_publisher(JointState, 'joint_states', 10)
         self.targets = self.create_publisher(JointState, 'simulation/target_feedback', 10)
         self.create_subscription(JointState, 'simulation/joint_commands', self.command, 10)
+        self.pad = Gamepad(self.get_parameter('stick_plane').value)
+        if self.get_parameter('gamepad').value:
+            self.create_subscription(Joy, 'joy', self.joy, qos_profile_sensor_data)
         self.markers = self.create_publisher(MarkerArray, 'scene/objects',
                         QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
         self.images, self.infos = {}, {}
@@ -41,10 +47,20 @@ class Playground(Node):
         self.get_logger().info('Playground ready: scene services and physical joint-state feedback')
 
     def command(self, msg):
-        if len(msg.name) == len(msg.position):
+        if not self.get_parameter('gamepad').value and len(msg.name) == len(msg.position):
             self.world.command(msg.name, msg.position)
 
+    def joy(self, msg):
+        self.pad.update(msg.axes, msg.buttons, time.monotonic())
+
     def physics(self):
+        if self.get_parameter('gamepad').value:
+            twist, grip = self.pad.command(time.monotonic())
+            if any(twist) or grip:
+                self.world.cartesian_command(twist, grip, 1/60)
+            target = JointState()
+            target.name, target.position = list(self.world.targets), list(self.world.targets.values())
+            self.targets.publish(target)
         self.world.step()
         msg = JointState()
         msg.header.stamp = self.get_clock().now().to_msg()
@@ -67,6 +83,7 @@ class Playground(Node):
         return res
 
     def reset(self, req, res):
+        self.pad.received = -float('inf')
         self.world.reset_arm()
         targets = JointState()
         targets.name = list(self.world.targets)

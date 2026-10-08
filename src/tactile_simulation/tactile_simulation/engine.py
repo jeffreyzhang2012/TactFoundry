@@ -100,6 +100,25 @@ class World:
         for _ in range(4):
             p.stepSimulation(physicsClientId=self.client)
 
+    def cartesian_command(self, twist, grip, dt):
+        """Damped differential IK at the gripper center; world-frame XYZ/RPY rates."""
+        if len(twist) != 6 or not np.isfinite(twist).all() or not math.isfinite(grip):
+            return
+        names, positions = self.joint_states()
+        linear, angular = p.calculateJacobian(
+            self.robot, self.links['ag95_ag95_base_link'], [0., 0., .15], positions,
+            [0.] * len(positions), [0.] * len(positions), physicsClientId=self.client)
+        columns = [names.index(f'joint{i}') for i in range(1, 7)]
+        jacobian = np.vstack((linear, angular))[:, columns]
+        velocity = jacobian.T @ np.linalg.solve(
+            jacobian @ jacobian.T + np.eye(6) * .0025, np.asarray(twist))
+        # Scale together to preserve direction near singular configurations.
+        velocity /= max(1., np.max(np.abs(velocity)) / .5)
+        values = [positions[i] + float(v) * dt for i, v in zip(columns, velocity)]
+        arm = [f'joint{i}' for i in range(1, 7)]
+        gripper = 'ag95_left_outer_knuckle_joint'
+        self.command(arm + [gripper], values + [self.targets[gripper] + grip * dt])
+
     def joint_states(self):
         names = list(self.joints)
         values = p.getJointStates(self.robot, list(self.joints.values()),

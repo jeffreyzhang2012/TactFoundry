@@ -30,6 +30,8 @@ def nodes(context):
              parameters=[{'robot_description': description, 'camera_source': source,
                           'object_kind': LaunchConfiguration('object_kind').perform(context),
                           'object_count': int(LaunchConfiguration('object_count').perform(context)),
+                          'gamepad': LaunchConfiguration('gamepad').perform(context) == 'true',
+                          'stick_plane': LaunchConfiguration('stick_plane').perform(context),
                           'seed': int(LaunchConfiguration('seed').perform(context))}]),
         Node(package='tactile_simulation', executable='scene_controls',
              condition=IfCondition(LaunchConfiguration('gui'))),
@@ -37,6 +39,10 @@ def nodes(context):
              arguments=['-d', os.path.join(share, 'rviz', 'xarm6_ag95.rviz')],
              condition=IfCondition(LaunchConfiguration('rviz'))),
     ]
+    if LaunchConfiguration('gamepad').perform(context) == 'true':
+        actions.append(Node(package='joy', executable='game_controller_node',
+                            parameters=[{'device_id': int(LaunchConfiguration('device_id').perform(context)),
+                                         'deadzone': .08, 'autorepeat_rate': 50.}], output='screen'))
     if source == 'real':
         actions.append(real_camera())
     return actions
@@ -52,6 +58,9 @@ def generate_launch_description():
         DeclareLaunchArgument('object_count', default_value='8'),
         DeclareLaunchArgument('seed', default_value='42'),
         DeclareLaunchArgument('gui', default_value='true', choices=['true', 'false']),
+        DeclareLaunchArgument('gamepad', default_value='false', choices=['true', 'false']),
+        DeclareLaunchArgument('device_id', default_value='0'),
+        DeclareLaunchArgument('stick_plane', default_value='yz', choices=['yz', 'xy']),
         DeclareLaunchArgument('rviz', default_value='true', choices=['true', 'false']),
         DeclareLaunchArgument('mount_xyz', default_value='0 0 0'),
         DeclareLaunchArgument('mount_rpy', default_value='0 0 1.5707963267948966'),

@@ -54,6 +54,8 @@ def generate_launch_description():
         DeclareLaunchArgument('domain_id', default_value='42',
                               description='Isolate simulation from hardware and display-only nodes'),
         SetEnvironmentVariable('ROS_DOMAIN_ID', LaunchConfiguration('domain_id')),
+        SetEnvironmentVariable('FASTRTPS_DEFAULT_PROFILES_FILE', os.path.join(
+            get_package_share_directory('tactile_simulation'), 'config', 'fastdds_udp.xml')),
         DeclareLaunchArgument('camera_source', default_value='sim', choices=['sim', 'real', 'none']),
         DeclareLaunchArgument('object_kind', default_value='mixed'),
         DeclareLaunchArgument('object_count', default_value='8'),

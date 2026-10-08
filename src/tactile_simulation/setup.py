@@ -7,6 +7,7 @@ setup(
         ('share/ament_index/resource_index/packages', ['resource/tactile_simulation']),
         ('share/tactile_simulation', ['package.xml', 'requirements.txt']),
         ('share/tactile_simulation/launch', glob('launch/*.launch.py')),
+        ('share/tactile_simulation/config', glob('config/*.xml')),
     ],
     install_requires=['setuptools'], tests_require=['pytest'], zip_safe=True,
     maintainer='Tact Foundry', maintainer_email='jeffreyzhang2012@users.noreply.github.com',

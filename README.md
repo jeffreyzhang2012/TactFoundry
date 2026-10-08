@@ -274,6 +274,10 @@ motions while preserving their requested proportion. Near singular poses,
 damped inverse kinematics further reduces achievable motion.
 This controls the physics playground; a real-arm Cartesian driver is not connected.
 
+The playground uses a Fast DDS UDP profile to avoid stale shared-memory locks
+in WSL. If the terminal shows `Stopped`, resume with `fg` (Ctrl+Z pauses the
+process); use Ctrl+C to stop a launch before starting another instance.
+
 On Windows/WSL, attach the USB controller to WSL using USB/IP (Bluetooth pairing
 to Windows alone does not expose it to Linux). From an administrator PowerShell
 after installing usbipd-win, run `usbipd list`, `usbipd bind --busid <BUSID>`, then

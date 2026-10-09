@@ -25,6 +25,27 @@ PROFILE={'version':'uf850_diverse_v6','colors':list(COLORS),'kinds':list(KINDS),
 def label(item):return f"{item['color']} {NOUNS[item['kind']]}"
 
 
+def color_transfer_spec(seed,variant):
+    """Evaluation only: identical physics, red versus unseen cyan target."""
+    if variant not in ('known','cyan'):raise ValueError('Unknown color-transfer variant')
+    spec=layout_spec(seed,'train')
+    index=seed-42001;kind=KINDS[(index//3)%len(KINDS)];slot=index%3
+    slots={item['slot']:item['xy'] for item in spec['objects']}
+    order=[slot]+[s for s in range(3) if s!=slot]
+    colors=[('cyan' if variant=='cyan' else 'red'),'blue','yellow']
+    palette={**COLORS,'cyan':(.04,.80,.85,1.)}
+    for i,item in enumerate(spec['objects']):
+        scale=item['scale']/(1.35 if item['kind']=='bowl' else 1.)
+        color=colors[i]
+        item.update(kind=kind,scale=scale*(1.35 if kind=='bowl' else 1.),
+            color=color,rgba=list(palette[color]),slot=order[i],xy=slots[order[i]],
+            novel_color=color=='cyan',novel_combination=(color,kind) in HELDOUT_PAIRS or color=='cyan')
+    spec.update(slot_order=order,layout_split='color_transfer_evaluation',
+        color_transfer_variant=variant,prompt_variant=0,mode='same_shape',
+        note='Only target color/name differs between known and cyan variants; no retraining.')
+    return spec
+
+
 def layout_spec(seed,split='train'):
     if split not in ('train','heldout'):raise ValueError('Unknown split')
     rng=np.random.default_rng(seed)

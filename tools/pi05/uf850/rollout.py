@@ -37,6 +37,8 @@ def main():
     parser.add_argument('--seed',type=int,default=101)
     parser.add_argument('--object',choices=(*TASKS,'target_0','target_1','target_2'),default='black_bowl')
     parser.add_argument('--diverse',action='store_true',help='Use the V6 color/shape scene generator')
+    parser.add_argument('--color-transfer',choices=['known','cyan'],help='Evaluation-only red/cyan matched scenes')
+    parser.add_argument('--sampling-seed',type=int,help='Repeatable per-chunk diffusion noise for paired tests')
     parser.add_argument('--layout',choices=['original','train','heldout'],default='original')
     parser.add_argument('--prompt',help='Override the instruction for a language sensitivity test')
     parser.add_argument('--ros-domain-id',type=int,default=44)
@@ -55,6 +57,7 @@ def main():
         parser.error('diverse evaluation requires train/heldout layout and target_0/1/2')
     if not args.diverse and args.object not in TASKS:
         parser.error('target_0/1/2 require --diverse')
+    if args.color_transfer and not args.diverse:parser.error('color transfer requires --diverse')
     ffmpeg=shutil.which('ffmpeg')
     if ffmpeg is None:
         candidates=list((Path.home()/'projects/openpi/.venv/lib').glob(
@@ -66,6 +69,8 @@ def main():
     os.environ['FASTRTPS_DEFAULT_PROFILES_FILE']=str(Path(get_package_share_directory('tactile_simulation'))/'config/fastdds_udp.xml')
     client=websocket_client_policy.WebsocketClientPolicy('127.0.0.1',args.port)
     metadata=client.get_server_metadata()
+    if args.sampling_seed is not None and not metadata.get('supports_sampling_noise'):
+        raise ValueError('This server does not support controlled diffusion noise')
     roi=metadata.get('dataset_profile',{}).get('external_roi')
     def policy_image(world):
         if roi:
@@ -100,10 +105,14 @@ def main():
             for seed in range(args.seed,args.seed+args.episodes):
                 world.reset_arm(); world.reset_scene(); client.reset()
                 rng=np.random.default_rng(seed)
+                sampling_rng=np.random.default_rng(args.sampling_seed+seed) if args.sampling_seed is not None else None
                 offset=rng.uniform([-.015,-.015],[.015,.015])
                 if args.diverse:
                     from diverse_tasks import layout_spec as diverse_spec,apply_layout as apply_diverse,label,TEMPLATES
-                    spec=diverse_spec(seed,args.layout)
+                    if args.color_transfer:
+                        from diverse_tasks import color_transfer_spec
+                        spec=color_transfer_spec(seed,args.color_transfer)
+                    else:spec=diverse_spec(seed,args.layout)
                 else:spec=layout_spec(seed,args.layout) if args.layout!='original' else None
                 if spec:
                     if args.diverse:apply_diverse(world,spec)
@@ -143,8 +152,11 @@ def main():
                     ImageDraw.Draw(frame).text((4,4),f'{display_label} | step {step}',fill='white',stroke_width=1,stroke_fill='black')
                     frame.save(frames_dir/f'{step:06d}.png')
                     if step%args.execute_steps==0:
-                        prediction=np.asarray(client.infer({'observation/state':joint_state(world),
-                            'observation/image':rgb,'observation/wrist_image':wrist,'prompt':prompt})['actions'])
+                        observation={'observation/state':joint_state(world),
+                            'observation/image':rgb,'observation/wrist_image':wrist,'prompt':prompt}
+                        if sampling_rng is not None:
+                            observation['_sampling_noise']=sampling_rng.standard_normal((10,32)).astype(np.float32)
+                        prediction=np.asarray(client.infer(observation)['actions'])
                         if prediction.shape!=(10,7) or not np.isfinite(prediction).all():
                             raise ValueError('Invalid action chunk from policy')
                     target=prediction[step%args.execute_steps]
@@ -199,6 +211,8 @@ def main():
                             steps=step+1,rate_limited_steps=clipped,max_object_height=evaluator.max_height,
                             final_object_position=final,policy_metadata=metadata)
                 result['rate_limit_reference']='previous_command'
+                result['sampling_seed']=args.sampling_seed
+                result['color_transfer_variant']=args.color_transfer
                 result['first_grasp_attempt']=first_grasp_attempt
                 if args.diverse:result.update(target_label=label(item),color=item['color'],kind=item['kind'])
                 result['execute_steps']=args.execute_steps

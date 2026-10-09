@@ -12,14 +12,14 @@ from success import PlacementEvaluator
 from tasks import OBJECTS, PROMPTS, apply_layout, layout_spec
 
 
-def episode(layout_seed, target, *, split='train', render=True, close_angle=None, grasp_offset=.195, diverse=False):
+def episode(layout_seed, target, *, split='train', render=True, close_angle=None, grasp_offset=.195, diverse=False, spec_override=None):
     model=Path(get_package_share_directory('tactile_robot_description'))/'urdf/xarm6_ag95.urdf.xacro'
     world=World(xacro.process_file(str(model),mappings={'robot_model':'uf850','base_xyz':'0 0 .75'}).toxml(),
                 'tabletop',gripper_effort=3.)
     states,actions,images,wrists=[],[],[],[]
     if diverse:
         from diverse_tasks import layout_spec as diverse_spec,apply_layout as diverse_apply,label,TEMPLATES,render_external
-        spec=diverse_spec(layout_seed,split)
+        spec=spec_override if spec_override is not None else diverse_spec(layout_seed,split)
         item=next(item for item in spec['objects'] if item['name']==target)
         prompt=TEMPLATES[spec['prompt_variant']].format(label=label(item))
         initialize=diverse_apply

@@ -25,6 +25,23 @@ def test_sampling_retains_original_chunks_and_excludes_validation():
     assert np.sum(indices==44)==1
 
 
+def test_color_transfer_changes_only_target_appearance_and_covers_slots():
+    from diverse_tasks import color_transfer_spec
+    assert 'cyan' not in COLORS
+    coverage=set()
+    for seed in range(42001,42013):
+        known=color_transfer_spec(seed,'known');novel=color_transfer_spec(seed,'cyan')
+        a,b=known['objects'][0],novel['objects'][0]
+        assert a['color']=='red' and b['color']=='cyan'
+        assert known['objects'][1:]==novel['objects'][1:]
+        ignored={'color','rgba','novel_color','novel_combination'}
+        assert {k:v for k,v in a.items() if k not in ignored}=={k:v for k,v in b.items() if k not in ignored}
+        assert known['start_xyz']==novel['start_xyz'] and known['plate_xy']==novel['plate_xy']
+        assert len({i['kind'] for i in novel['objects']})==1
+        coverage.add((b['kind'],b['slot']))
+    assert len(coverage)==12
+
+
 def test_pure_noise_cannot_leak_action_target():
     import jax
     import jax.numpy as jnp

@@ -492,3 +492,52 @@ bash tools/pi05/uf850/diverse.sh rollout --object black_bowl --seed 601 --episod
 Stop the existing policy server before loading another copy for evaluation
 or training. The live rollout opens its own RViz on domain 51; the PS5 scene
 on domain 42 can remain separate.
+
+## Unseen-color transfer test
+
+The unchanged V6 checkpoint was tested with **cyan**, absent from its robot
+fine-tuning data. Cyan was added only to the evaluation scene factory, not the
+training palette. A paired red control used the same 12 predetermined layouts:
+four familiar shapes × three target positions, with blue and yellow distractors
+of the same shape. Only the target RGB and its color word changed. Geometry,
+physics, starting poses and per-chunk diffusion noise were matched; the recorded
+initial joint states and object poses were checked within 1e-5. No retraining,
+target detector, IK action correction or success-based layout filtering occurred.
+
+| Metric | Familiar red | Unseen cyan |
+| --- | --- | --- |
+| Requested first-reach teacher branch | 12/12 | 12/12 |
+| All three color instructions in controlled scenes | 36/36 | 36/36 |
+| Correct near-object closing attempt | 11/12 | 11/12 |
+| Requested object grasped and lifted | 5/12 | 6/12 |
+| Wrong object grasped and lifted | 0/12 | 0/12 |
+| Stable placement under the full success rule | 0/12 | 1/12 |
+
+Neither color produced a detected near-object closing attempt in seed 42004.
+The cyan bowl in seed 42001 was successfully placed. Another cyan bowl reached
+the plate upside down, failing the required orientation. The separate physical
+IK reference succeeded on 10/12 starts; all starts were retained in policy tests.
+
+These results support transfer of color-based initial target selection in this
+small test, while grasping, deposit accuracy and release remain weak for both
+colors. They do not establish a reliable cyan manipulation policy or a meaningful
+performance advantage over red. Cyan is new to this robot fine-tune, and may
+already be familiar to the pretrained foundation model. Shapes, cameras and
+lighting stayed familiar; two unfamiliar colors competing in one scene were
+not tested.
+
+Windows results are in `data/uf850_tuning/color_transfer_v6/`, with
+`color-transfer-results.png`, `color-transfer-summary.json`, the input scene
+montage and 24 verified MP4s. Fourteen relevant tests passed. To reproduce with
+the V6 server already running on localhost:8001:
+
+```bash
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+python3 tools/pi05/uf850/color_transfer_probe.py --output data/color_probe
+bash tools/pi05/uf850/diverse.sh rollout --diverse --color-transfer cyan \
+  --object target_0 --layout heldout --seed 42001 --episodes 12 \
+  --sampling-seed 170 --max-steps 400 --headless --ros-domain-id 52 \
+  --output data/color_cyan_tests
+# Repeat with --color-transfer known and a separate output directory for red.
+```

@@ -124,6 +124,7 @@ def main():
                     default_prompt=PROMPTS[args.object][seed%3] if spec else TASKS[args.object]
                     names=list(PROMPTS)
                 prompt=args.prompt or default_prompt
+                display_label=label(item) if args.diverse else args.object
                 evaluator=PlacementEvaluator(world,bowl,plate)
                 other_evaluators={name:PlacementEvaluator(world,props[name]['body'],plate)
                                   for name in names if name!=args.object}
@@ -139,7 +140,7 @@ def main():
                     rgb=policy_image(world)
                     wrist,_,_=world.render('d435_camera_color_optical_frame',224,224)
                     frame=Image.fromarray(np.concatenate((rgb,wrist),axis=1))
-                    ImageDraw.Draw(frame).text((4,4),f'{args.object} | step {step}',fill='white',stroke_width=1,stroke_fill='black')
+                    ImageDraw.Draw(frame).text((4,4),f'{display_label} | step {step}',fill='white',stroke_width=1,stroke_fill='black')
                     frame.save(frames_dir/f'{step:06d}.png')
                     if step%args.execute_steps==0:
                         prediction=np.asarray(client.infer({'observation/state':joint_state(world),
@@ -186,7 +187,7 @@ def main():
                     rgb=policy_image(world)
                     wrist,_,_=world.render('d435_camera_color_optical_frame',224,224)
                     frame=Image.fromarray(np.concatenate((rgb,wrist),axis=1))
-                    ImageDraw.Draw(frame).text((4,4),f'{args.object} | settling',fill='white',stroke_width=1,stroke_fill='black')
+                    ImageDraw.Draw(frame).text((4,4),f'{display_label} | settling',fill='white',stroke_width=1,stroke_fill='black')
                     frame.save(frames_dir/f'{step+1+settle:06d}.png')
                 final=p.getBasePositionAndOrientation(bowl,physicsClientId=world.client)[0]
                 # Require the placement to survive settling after the last action.

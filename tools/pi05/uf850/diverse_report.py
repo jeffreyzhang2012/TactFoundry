@@ -53,13 +53,15 @@ def main():
                grounding['nearest_teacher_branch_agreement']/grounding['instructions']]
     axes[1].bar(['Train scenes','Held-out scenes'],fractions,color=['#888888','#246bb1'])
     axes[1].set(title='Instruction branch agreement',ylabel='Fraction',ylim=(0,1))
-    objects=['target_0','target_1','target_2'];x=np.arange(3)
-    policy=[trials['unseen_diverse'][o]['successes'] for o in objects]
-    reference=[sum(r['success'] for r in teacher['results'] if r['object']==o) for o in objects]
-    axes[2].bar(x-.18,policy,.36,label='Policy',color='#246bb1')
-    axes[2].bar(x+.18,reference,.36,label='IK reference',color='#888888')
-    axes[2].set(title='Fresh physical simulation trials',xticks=x,xticklabels=['Target 0','Target 1','Target 2'],
-                ylabel='Placements / 3',yticks=range(4),ylim=(0,3.5));axes[2].legend(fontsize=8)
+    policy=sum(r['successes'] for r in trials['unseen_diverse'].values())
+    reference=sum(r['success'] for r in teacher['results'])
+    axes[2].bar(['π0.5 policy','IK reference'],[policy,reference],color=['#246bb1','#888888'])
+    axes[2].set(title='Fresh physical simulation trials',ylabel='Successful placements / 9',
+                yticks=range(10),ylim=(0,9.5))
+    for i,value in enumerate([policy,reference]):axes[2].text(i,value+.15,f'{value}/9',ha='center')
+    for i,result in enumerate([train_grounding,grounding]):
+        axes[1].text(i,.9,f"{result['nearest_teacher_branch_agreement']}/{result['instructions']}",
+                     ha='center',color='white')
     for ax in axes:ax.grid(axis='y',alpha=.15)
     fig.suptitle('UF850 + AG95: 360 diverse demonstrations, 4,000 updates from pretrained π0.5')
     fig.text(.5,.01,'Instruction agreement is a first-reach proxy. Physical success requires grasp, lift and stable release on the plate.',ha='center',fontsize=9)

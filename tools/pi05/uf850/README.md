@@ -349,7 +349,7 @@ Local Windows reports, JSON/NPZ traces and videos are under
 `data/uf850_tuning/multi_v3/` and `data/uf850_tuning/multi_v4/`. The latter
 contains `training-results.png`, `training-summary.json`,
 `training-language-probe.json`, and combined `unseen_<object>.mp4` files.
-The final policy server serves the focused checkpoint on localhost:8001.
+The V4 trials used the focused checkpoint server on localhost:8001.
 Fourteen relevant tests passed, including physical teacher replay, target
 scoring, near-zero-joint IK and split/resampling checks; Python compilation
 and shell syntax checks also passed. Weights and raw data remain local.
@@ -443,3 +443,52 @@ sampling noise identical. Its branch agreement measures initial reach choice,
 not successful manipulation. Independent physical trials score the requested
 object's grasp, lift, stable plate support and release, including wrong-object
 activity and the first near-object closing attempt.
+
+The completed V6 experiment ran 4,000 updates with batch size 4. It used
+102,941 training frames and 25,753 validation frames. Logged training loss
+fell from 0.4432 to 0.0072. On 96 validation samples, arm MAE was 0.005984 rad
+and gripper MAE 0.017570 rad; holding the measured position gave 0.015015 rad
+and 0.063079 rad respectively. The controlled instruction probe agreed with
+the requested first-reach teacher branch on **71/72 validation instructions**
+and **18/18 instructions from six training layouts**. This is a reach-choice
+proxy, not a grasp or placement success score.
+
+| Physical evaluation | Correct first near-object closing attempt | Requested object grasped and lifted | Stable successful placement |
+| --- | --- | --- | --- |
+| Fresh layouts 30001–30003, three targets each | 9/9 | 5/9 | 2/9 |
+| Original scene 601, bowl/bottle/block | 3/3 | 2/3 | 1/3 |
+
+The fresh successes were the purple block and black block. The separate IK
+reference succeeded on 7/9 of the same predetermined starts; its two failures
+were retained. In the original scene, the black bowl was correctly picked and
+placed (5.3 mm from the plate center), addressing the earlier seed-601 wrong
+target behavior in this trial. The green bottle was approached correctly but
+not grasped. The red block was grasped, lifted and released on the plate,
+but its center remained 28.6 mm from the plate center, outside the 25 mm limit.
+No waypoint controller or ground-truth target pose modified policy actions.
+
+Target selection is substantially stronger in these tests, while manipulation
+accuracy and recovery remain limited. These are small stochastic simulation
+tests with fixed cameras, not evidence of real-hardware readiness or arbitrary
+camera-placement generalization. Positive teacher demonstrations do not cover
+missed grasps, dropped objects or correction after an inaccurate deposit.
+
+All 12 MP4 videos decode successfully. Windows reports, videos and JSON traces
+are under `data/uf850_tuning/diverse_v6/`, including `training-results.png` and
+`training-summary.json`. The model weights and raw recordings remain in WSL.
+Thirteen relevant tests passed, and the full training-loss graph was checked
+before the run.
+
+```bash
+checkpoint="$PWD/data/uf850_tuning_diverse_v6/checkpoints/pi05_uf850_lora/restart4000/3999"
+bash tools/pi05/uf850/diverse.sh evaluate --checkpoint "$checkpoint" --samples 96 \
+  --language-probe-source data/uf850_diverse_sim_v6 --training-probe-layouts 6
+bash tools/pi05/uf850/diverse.sh serve --checkpoint "$checkpoint"
+# Another terminal: live simulated bowl trial on a separate ROS domain.
+bash tools/pi05/uf850/diverse.sh rollout --object black_bowl --seed 601 --episodes 1 \
+  --max-steps 400 --ros-domain-id 51 --output data/v6_bowl_live
+```
+
+Stop the existing policy server before loading another copy for evaluation
+or training. The live rollout opens its own RViz on domain 51; the PS5 scene
+on domain 42 can remain separate.

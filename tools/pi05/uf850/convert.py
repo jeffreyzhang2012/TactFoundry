@@ -76,7 +76,7 @@ def main():
                 dataset.add_frame({key:data[key][i] for key in features}|{'task':meta['prompt']})
             dataset.save_episode()
             manifest[split].append({'seed':seed,'frames':len(data['state']),
-                                    **{key:meta[key] for key in ('object','layout_seed','slot_order') if key in meta}})
+                                    **{key:meta[key] for key in ('object','layout_seed','slot_order','color','kind','slot','novel_combination') if key in meta}})
             print(split,'saved seed',seed,flush=True)
         dataset.stop_image_writer()
         print(split,repo,len(paths),'episodes',flush=True)

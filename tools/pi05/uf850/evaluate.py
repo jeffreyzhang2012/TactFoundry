@@ -17,7 +17,10 @@ def main():
     parser.add_argument('--samples',type=int,default=32)
     parser.add_argument('--language-probe-source',type=Path,
                         help='Raw matched-layout dataset for controlled instruction sensitivity measurements')
+    parser.add_argument('--training-probe-layouts',type=int,default=0)
     args=parser.parse_args()
+    if args.samples<1 or args.training_probe_layouts<0:
+        parser.error('samples must be positive and training-probe-layouts nonnegative')
     cfg=make_config(args.root,args.repo_id,args.weights)
     policy=policy_config.create_trained_policy(cfg,args.checkpoint)
     data=cfg.data.create(cfg.assets_dirs,cfg.model)
@@ -50,5 +53,12 @@ def main():
                                  {**cfg.policy_metadata,'checkpoint':str(args.checkpoint)})
         (args.root/'language-grounding.json').write_text(json.dumps(report,indent=2))
         print(json.dumps(report,indent=2),flush=True)
+        if args.training_probe_layouts:
+            report=measure_grounding(policy.infer,args.language_probe_source,
+                {**cfg.policy_metadata,'checkpoint':str(args.checkpoint)},split='train',
+                max_layouts=args.training_probe_layouts)
+            (args.root/'training-language-probe.json').write_text(json.dumps(report,indent=2))
+            print('Training instruction branch agreement',report['nearest_teacher_branch_agreement'],
+                  '/',report['instructions'],flush=True)
 
 if __name__=='__main__': main()

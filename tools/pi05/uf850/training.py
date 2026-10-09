@@ -1,5 +1,6 @@
 """Local OpenPI extension: explicit 850 joint-action contract, no upstream patch."""
 import dataclasses
+import json
 from pathlib import Path
 import numpy as np
 from openpi import transforms
@@ -37,17 +38,33 @@ class RobotData(config.DataConfigFactory):
             model_transforms=config.ModelTransformFactory()(model_config),action_sequence_keys=('actions',))
 
 def make_config(root,repo_id,weights,*,steps=300,batch_size=4,exp_name='pilot',resume=False):
-    model=pi0_config.Pi0Config(pi05=True,action_horizon=10,
+    profile_path=Path(root)/'training-profile.json'
+    profile=json.loads(profile_path.read_text()) if profile_path.exists() else {}
+    model_class=pi0_config.Pi0Config
+    options={}
+    if 'pure_noise_probability' in profile:
+        from conditional_flow import ConditionalPi0Config
+        model_class=ConditionalPi0Config
+        options['pure_noise_probability']=profile['pure_noise_probability']
+    model=model_class(pi05=True,action_horizon=10,**options,
                               paligemma_variant='gemma_2b_lora',action_expert_variant='gemma_300m_lora')
+    freeze=model.get_freeze_filter()
+    if profile.get('freeze_vision',False):
+        from flax import nnx
+        from openpi.shared import nnx_utils
+        freeze=nnx.Any(freeze,nnx_utils.PathRegex('.*PaliGemma/img/.*'))
+    dataset_path=Path(root)/'dataset-profile.json'
+    dataset_profile=json.loads(dataset_path.read_text()) if dataset_path.exists() else {}
     return config.TrainConfig(name=NAME,exp_name=exp_name,model=model,
         data=RobotData(repo_id=repo_id,base_config=config.DataConfig(prompt_from_task=True)),
         weight_loader=weight_loaders.CheckpointWeightLoader(str(Path(weights)/'params')),
-        freeze_filter=model.get_freeze_filter(),ema_decay=None,batch_size=batch_size,num_workers=0,
+        freeze_filter=freeze,ema_decay=None,batch_size=batch_size,num_workers=0,
         num_train_steps=steps,log_interval=10,save_interval=100,keep_period=None,
         assets_base_dir=str(Path(root)/'assets'),checkpoint_base_dir=str(Path(root)/'checkpoints'),
         lr_schedule=optimizer.CosineDecaySchedule(warmup_steps=20,peak_lr=1e-4,decay_steps=steps,decay_lr=1e-5),
         wandb_enabled=False,resume=resume,policy_metadata={'robot':'uf850_ag95','fps':20,
             'dataset':repo_id,
+            'training_profile':profile,'dataset_profile':dataset_profile,
             'actions':'absolute joint1..6 + AG95 master angle in radians','gripper_motor_effort_nm':3.})
 
 def register(cfg):

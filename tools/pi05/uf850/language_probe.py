@@ -14,24 +14,28 @@ def measure_grounding(infer,source,metadata,*,split='heldout',max_layouts=None):
     probes=[]
     noise=np.random.default_rng(7).standard_normal((10,32)).astype(np.float32)
     for seed,rows in groups.items():
-        data=[np.load(source/f"episode_{row['seed']:04d}.npz") for row in rows]
+        at=12;data=[]
+        for row in rows:
+            with np.load(source/f"episode_{row['seed']:04d}.npz") as archive:
+                data.append({key:archive[key][at] for key in ('state','image','wrist_image')}|
+                            {'actions':archive['actions'][at:at+10,:6]})
         metas=[json.loads((source/f"attempt_{row['seed']:04d}.json").read_text()) for row in rows]
-        at=12
         reference=data[0]
         for other in data[1:]:
-            if not (np.allclose(other['state'][at],reference['state'][at],atol=1e-6) and
-                    np.array_equal(other['image'][at],reference['image'][at]) and
-                    np.array_equal(other['wrist_image'][at],reference['wrist_image'][at])):
+            if not (np.allclose(other['state'],reference['state'],atol=1e-6) and
+                    np.array_equal(other['image'],reference['image']) and
+                    np.array_equal(other['wrist_image'],reference['wrist_image'])):
                 raise ValueError('Language probe requires identical matched observations')
-        targets=np.array([demo['actions'][at:at+10,:6] for demo in data])
+        targets=np.array([demo['actions'] for demo in data])
         predictions=[]
         for meta in metas:
-            prediction=infer({'observation/state':reference['state'][at],
-                'observation/image':reference['image'][at],'observation/wrist_image':reference['wrist_image'][at],
+            prediction=infer({'observation/state':reference['state'],
+                'observation/image':reference['image'],'observation/wrist_image':reference['wrist_image'],
                 'prompt':meta['prompt']},noise=noise)['actions']
             predictions.append(np.asarray(prediction)[:,:6])
         errors=np.mean(np.abs(np.asarray(predictions)[:,None]-targets[None]),axis=(2,3))
         probes.append({'layout_seed':seed,'objects':[meta['object'] for meta in metas],
+            'target_labels':[meta.get('target_label',meta['object']) for meta in metas],
             'prompts':[meta['prompt'] for meta in metas],'arm_mae_matrix_rad':errors.tolist(),
             'nearest_teacher_branch':np.argmin(errors,axis=1).tolist(),
             'matching_branches':int(np.sum(np.argmin(errors,axis=1)==np.arange(len(metas))))})

@@ -393,3 +393,53 @@ tasks and web data. This small local fine-tune does not reproduce that
 coverage. Its excluded-layout tests measure spatial transfer for three
 familiar objects with fixed cameras; they do not establish novel-object,
 viewpoint, task or real-hardware generalization.
+
+## Fresh-base diverse run (V6)
+
+V6 restarts from the downloaded pretrained `pi05_base`, with a fresh optimizer.
+It does not inherit V1–V4 or the one-scene diagnostic's weights. This is robot
+fine-tuning from the pretrained model, rather than random initialization of
+the entire foundation model.
+
+The data recipe records 96 training layouts and 24 held-out layouts, with three
+physically successful target-specific trajectories per layout: 288 training
+and 72 validation demonstrations. Targets span eight colors and four shapes
+(bowl, bottle, block and cylinder). Same-color and same-shape scenes require
+using both parts of the instruction. Layouts vary object XY by up to 6/8 cm,
+plate XY by 3.5 cm, initial arm position, yaw, size, mass, friction and RGB.
+Four color/shape combinations are reserved for validation: yellow bottle,
+purple block, blue bowl and green cylinder. Camera extrinsics and lighting
+remain fixed. A workspace crop increases object visibility; its projection
+is saved with the model and reused during inference.
+
+The vision encoder is frozen. Language/action LoRA and action projections are
+trained with seven real action axes, excluding padding. Half of training
+examples use pure diffusion noise, which carries no action-target hints;
+the remainder retain ordinary flow matching. Initial reaches are resampled
+and balanced by color, shape and spatial slot. Loss values are consequently
+not directly comparable to the older 32-axis objective.
+
+```bash
+# From the WSL repository, after building the ROS packages.
+bash tools/pi05/uf850/diverse.sh generate-multi --diverse \
+  --train-layouts 96 --heldout-layouts 24 --train-seed 10001 --heldout-seed 20001
+bash tools/pi05/uf850/diverse.sh convert
+mkdir -p data/uf850_tuning_diverse_v6
+cp data/uf850_diverse_sim_v6/dataset-profile.json data/uf850_tuning_diverse_v6/
+bash tools/pi05/uf850/diverse.sh stats --state-min-range .02 --action-min-range .002 \
+  --pure-noise-probability .5 --freeze-vision
+bash tools/pi05/uf850/diverse.sh train --steps 4000 --batch-size 4 --exp-name restart4000 \
+  --pure-noise-probability .5 --freeze-vision --diverse-sampling \
+  --selection-manifest data/uf850_diverse_sim_v6/split.json
+```
+
+Weights save under
+`data/uf850_tuning_diverse_v6/checkpoints/pi05_uf850_lora/restart4000/3999/`.
+Generation, conversion and training do not publish ROS topics. Physical
+evaluation uses a separate domain and executes raw policy actions with the
+documented joint rate limit; IK is used only as a separate teacher reference.
+The held-out instruction probe changes text while keeping images, state and
+sampling noise identical. Its branch agreement measures initial reach choice,
+not successful manipulation. Independent physical trials score the requested
+object's grasp, lift, stable plate support and release, including wrong-object
+activity and the first near-object closing attempt.

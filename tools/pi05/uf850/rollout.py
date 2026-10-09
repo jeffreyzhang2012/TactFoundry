@@ -35,7 +35,8 @@ def main():
     parser.add_argument('--port',type=int,default=8001)
     parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--seed',type=int,default=101)
-    parser.add_argument('--object',choices=TASKS,default='black_bowl')
+    parser.add_argument('--object',choices=(*TASKS,'target_0','target_1','target_2'),default='black_bowl')
+    parser.add_argument('--diverse',action='store_true',help='Use the V6 color/shape scene generator')
     parser.add_argument('--layout',choices=['original','train','heldout'],default='original')
     parser.add_argument('--prompt',help='Override the instruction for a language sensitivity test')
     parser.add_argument('--ros-domain-id',type=int,default=44)
@@ -50,6 +51,10 @@ def main():
     args=parser.parse_args()
     if args.episodes < 1 or args.max_steps < 1:
         parser.error('episodes and max-steps must be positive')
+    if args.diverse and (args.layout=='original' or args.object not in ('target_0','target_1','target_2')):
+        parser.error('diverse evaluation requires train/heldout layout and target_0/1/2')
+    if not args.diverse and args.object not in TASKS:
+        parser.error('target_0/1/2 require --diverse')
     ffmpeg=shutil.which('ffmpeg')
     if ffmpeg is None:
         candidates=list((Path.home()/'projects/openpi/.venv/lib').glob(
@@ -61,6 +66,12 @@ def main():
     os.environ['FASTRTPS_DEFAULT_PROFILES_FILE']=str(Path(get_package_share_directory('tactile_simulation'))/'config/fastdds_udp.xml')
     client=websocket_client_policy.WebsocketClientPolicy('127.0.0.1',args.port)
     metadata=client.get_server_metadata()
+    roi=metadata.get('dataset_profile',{}).get('external_roi')
+    def policy_image(world):
+        if roi:
+            from diverse_tasks import render_external
+            return render_external(world,roi)
+        return world.render_external(224,224)[0]
     if metadata.get('robot')!='uf850_ag95' or metadata.get('gripper_motor_effort_nm')!=3.:
         raise ValueError(f'Wrong policy server for this simulated robot: {metadata}')
     share=Path(get_package_share_directory('tactile_robot_description'))
@@ -88,21 +99,34 @@ def main():
         try:
             for seed in range(args.seed,args.seed+args.episodes):
                 world.reset_arm(); world.reset_scene(); client.reset()
-                props={obj['name']:obj for obj in world.objects.values()}
-                bowl,plate=props[args.object]['body'],props['target_plate']['body']
                 rng=np.random.default_rng(seed)
                 offset=rng.uniform([-.015,-.015],[.015,.015])
-                spec=layout_spec(seed,args.layout) if args.layout!='original' else None
+                if args.diverse:
+                    from diverse_tasks import layout_spec as diverse_spec,apply_layout as apply_diverse,label,TEMPLATES
+                    spec=diverse_spec(seed,args.layout)
+                else:spec=layout_spec(seed,args.layout) if args.layout!='original' else None
                 if spec:
-                    apply_layout(world,spec)
+                    if args.diverse:apply_diverse(world,spec)
+                    else:apply_layout(world,spec)
                 else:
+                    props={obj['name']:obj for obj in world.objects.values()}
+                    bowl=props[args.object]['body']
                     xyz,quat=p.getBasePositionAndOrientation(bowl,physicsClientId=world.client)
                     p.resetBasePositionAndOrientation(bowl,(xyz[0]+offset[0],xyz[1]+offset[1],xyz[2]),quat,physicsClientId=world.client)
                     for _ in range(30): world.step()
-                prompt=args.prompt or (PROMPTS[args.object][seed%3] if spec else TASKS[args.object])
+                props={obj['name']:obj for obj in world.objects.values()}
+                bowl,plate=props[args.object]['body'],props['target_plate']['body']
+                if args.diverse:
+                    item=next(i for i in spec['objects'] if i['name']==args.object)
+                    default_prompt=TEMPLATES[spec['prompt_variant']].format(label=label(item))
+                    names=['target_0','target_1','target_2']
+                else:
+                    default_prompt=PROMPTS[args.object][seed%3] if spec else TASKS[args.object]
+                    names=list(PROMPTS)
+                prompt=args.prompt or default_prompt
                 evaluator=PlacementEvaluator(world,bowl,plate)
                 other_evaluators={name:PlacementEvaluator(world,props[name]['body'],plate)
-                                  for name in PROMPTS if name!=args.object}
+                                  for name in names if name!=args.object}
                 node.physics(); publish_camera(); node.scene()
                 initial_objects={name:p.getBasePositionAndOrientation(obj['body'],physicsClientId=world.client)[0]
                                  for name,obj in props.items()}
@@ -110,9 +134,9 @@ def main():
                 frames_dir=scratch/f'frames_{seed}'
                 frames_dir.mkdir()
                 trace=[]
-                object_trace=[]
+                object_trace=[];first_grasp_attempt=None
                 for step in range(args.max_steps):
-                    rgb,_,_=world.render_external(224,224)
+                    rgb=policy_image(world)
                     wrist,_,_=world.render('d435_camera_color_optical_frame',224,224)
                     frame=Image.fromarray(np.concatenate((rgb,wrist),axis=1))
                     ImageDraw.Draw(frame).text((4,4),f'{args.object} | step {step}',fill='white',stroke_width=1,stroke_fill='black')
@@ -124,6 +148,16 @@ def main():
                             raise ValueError('Invalid action chunk from policy')
                     target=prediction[step%args.execute_steps]
                     actual=joint_state(world)
+                    if first_grasp_attempt is None and actual[6]>.15:
+                        flange=np.asarray(p.getLinkState(world.robot,world.links['ag95_ag95_base_link'],
+                            computeForwardKinematics=True,physicsClientId=world.client)[4])
+                        candidates={name:np.asarray(p.getBasePositionAndOrientation(props[name]['body'],
+                            physicsClientId=world.client)[0]) for name in names}
+                        nearest=min(names,key=lambda n:np.linalg.norm(flange[:2]-candidates[n][:2]))
+                        distance_xy=float(np.linalg.norm(flange[:2]-candidates[nearest][:2]))
+                        if distance_xy<.075 and abs(flange[2]-candidates[nearest][2]-.19)<.06:
+                            first_grasp_attempt={'object':nearest,'step':step,'distance_xy_m':distance_xy,
+                                                 'correct':nearest==args.object}
                     trace.append(np.r_[actual,target])
                     if step%40==0:
                         tool=p.getLinkState(world.robot,world.links['ag95_ag95_base_link'],
@@ -149,7 +183,7 @@ def main():
                     for _ in range(3): world.step()
                     checks,position,distance=evaluator.observe()
                     stable=stable+1 if all(checks.values()) else 0
-                    rgb,_,_=world.render_external(224,224)
+                    rgb=policy_image(world)
                     wrist,_,_=world.render('d435_camera_color_optical_frame',224,224)
                     frame=Image.fromarray(np.concatenate((rgb,wrist),axis=1))
                     ImageDraw.Draw(frame).text((4,4),f'{args.object} | settling',fill='white',stroke_width=1,stroke_fill='black')
@@ -164,6 +198,8 @@ def main():
                             steps=step+1,rate_limited_steps=clipped,max_object_height=evaluator.max_height,
                             final_object_position=final,policy_metadata=metadata)
                 result['rate_limit_reference']='previous_command'
+                result['first_grasp_attempt']=first_grasp_attempt
+                if args.diverse:result.update(target_label=label(item),color=item['color'],kind=item['kind'])
                 result['execute_steps']=args.execute_steps
                 result['ros_camera_streams']=not args.headless or args.publish_ros_images
                 result['final_checks']=checks
